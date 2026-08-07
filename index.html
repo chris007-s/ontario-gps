@@ -250,6 +250,31 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
   transition:bottom .35s cubic-bezier(.4,0,.2,1);
   bottom:24px;
 }
+
+/* ── Collapsed route pill — shown after routing ── */
+#route-pill{
+  position:fixed;top:12px;left:12px;right:12px;z-index:100;
+  display:none;align-items:center;gap:10px;
+  background:#fff;border-radius:14px;
+  box-shadow:0 2px 12px rgba(0,0,0,.18);
+  padding:12px 14px;cursor:pointer;
+}
+#route-pill.show{display:flex}
+#pill-dest{flex:1;min-width:0}
+#pill-dest-name{font-size:15px;font-weight:600;color:#202124;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#pill-dest-sub{font-size:12px;color:#5f6368;margin-top:1px}
+#pill-edit{background:#f1f3f4;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;color:#1a73e8;cursor:pointer;flex-shrink:0}
+#pill-chips{
+  position:fixed;top:76px;left:12px;right:12px;z-index:100;
+  display:none;gap:8px;flex-wrap:nowrap;overflow-x:auto;
+  scrollbar-width:none;
+}
+#pill-chips::-webkit-scrollbar{display:none}
+#pill-chips.show{display:flex}
+
+/* ── Searchbar transition ── */
+#searchbar{transition:opacity .2s,transform .2s}
+#searchbar.collapsed{opacity:0;pointer-events:none;transform:translateY(-8px)}
 </style>
 </head>
 <body>
@@ -286,6 +311,25 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 
 <!-- FAB locate -->
 <button id="fab-locate" title="My location">📍</button>
+
+<!-- Collapsed route pill (replaces search bar after routing) -->
+<div id="route-pill">
+  <span style="font-size:22px;flex-shrink:0">📍</span>
+  <div id="pill-dest">
+    <div id="pill-dest-name">Destination</div>
+    <div id="pill-dest-sub">Tap to edit route</div>
+  </div>
+  <button id="pill-edit">✏️ Edit</button>
+</div>
+
+<!-- Chips shown alongside pill -->
+<div id="pill-chips">
+  <button class="chip primary" id="pill-chip-drive">▶ Drive</button>
+  <button class="chip" id="pill-chip-favs">⭐ Favs</button>
+  <button class="chip" id="pill-chip-voice">🔇 Voice</button>
+  <button class="chip" id="pill-chip-clear">✕ Clear</button>
+  <span style="background:#b91c1c;color:#fff;border-radius:20px;padding:8px 12px;font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0;display:flex;align-items:center">NO 400-SERIES</span>
+</div>
 
 <!-- Bottom sheet (directions) -->
 <div id="bottom-sheet">
@@ -549,6 +593,12 @@ function drawRoute(result){
   showSheet('peek');
   showFavSaveBtn();
   if(voiceOn) speakStep(result.steps[0]);
+  // Collapse search bar — show just the destination pill
+  const destLabel=document.getElementById('inp-to').value.trim()||'Destination';
+  const km=(result.distance/1000).toFixed(1);
+  const mins=Math.round(result.duration/60);
+  const hrs=Math.floor(mins/60),rem2=mins%60;
+  collapseSearch(destLabel, `${km} km · ${hrs?hrs+'h '+rem2+'m':mins+'m'} · No 400-series`);
 }
 
 // ═══════════════════════════════════════
@@ -675,6 +725,7 @@ function stopDrive(){
   isTracking=false;
   document.getElementById('chip-drive').textContent='▶ Drive';
   document.getElementById('chip-drive').classList.remove('driving');
+  document.getElementById('pill-chip-drive').textContent='▶ Drive';
   document.getElementById('nav-card').style.display='none';
   document.getElementById('gps-dot').classList.remove('live');
   document.getElementById('offroute').style.display='none';
@@ -805,8 +856,28 @@ function clearAll(){
   document.getElementById('s-turns').textContent='—';
   showSheet('hidden');
   showFavSaveBtn();
+  expandSearch();
   window.speechSynthesis?.cancel();
   setStat('Tap map to set start (A) then end (B).');
+}
+
+// ═══════════════════════════════════════
+//  SEARCH BAR COLLAPSE / EXPAND
+// ═══════════════════════════════════════
+function collapseSearch(destLabel,subLabel){
+  document.getElementById('searchbar').classList.add('collapsed');
+  document.getElementById('pill-dest-name').textContent=destLabel||'Destination';
+  document.getElementById('pill-dest-sub').textContent=subLabel||'Tap to edit route';
+  document.getElementById('route-pill').classList.add('show');
+  document.getElementById('pill-chips').classList.add('show');
+  // Sync voice button label
+  document.getElementById('pill-chip-voice').textContent=voiceOn?'🔊 Voice':'🔇 Voice';
+  document.getElementById('pill-chip-drive').textContent=isTracking?'⏹ Stop':'▶ Drive';
+}
+function expandSearch(){
+  document.getElementById('searchbar').classList.remove('collapsed');
+  document.getElementById('route-pill').classList.remove('show');
+  document.getElementById('pill-chips').classList.remove('show');
 }
 
 // ═══════════════════════════════════════
@@ -842,7 +913,9 @@ document.getElementById('chip-clear').addEventListener('click',clearAll);
 
 document.getElementById('chip-voice').addEventListener('click',()=>{
   voiceOn=!voiceOn;
-  document.getElementById('chip-voice').textContent=voiceOn?'🔊 Voice':'🔇 Voice';
+  const lbl=voiceOn?'🔊 Voice':'🔇 Voice';
+  document.getElementById('chip-voice').textContent=lbl;
+  document.getElementById('pill-chip-voice').textContent=lbl;
   document.getElementById('chip-voice').classList.toggle('active-chip',voiceOn);
   if(voiceOn&&currentRoute) speakStep(currentRoute.steps[activeStep]);
   else window.speechSynthesis?.cancel();
@@ -879,6 +952,34 @@ document.getElementById('btn-clear-to').addEventListener('click',()=>{
     const par=i.id==='inp-from'?'btn-clear-from':'btn-clear-to';
     document.getElementById(par).style.display=i.value?'block':'none';
   });
+});
+
+// ═══════════════════════════════════════
+//  PILL BUTTONS
+// ═══════════════════════════════════════
+document.getElementById('pill-edit').addEventListener('click',expandSearch);
+document.getElementById('route-pill').addEventListener('click',e=>{
+  if(e.target===document.getElementById('route-pill')||e.target===document.getElementById('pill-dest')||e.target===document.getElementById('pill-dest-name')||e.target===document.getElementById('pill-dest-sub'))
+    expandSearch();
+});
+
+document.getElementById('pill-chip-drive').addEventListener('click',()=>{
+  if(isTracking){stopDrive();document.getElementById('pill-chip-drive').textContent='▶ Drive';}
+  else{startDrive();document.getElementById('pill-chip-drive').textContent='⏹ Stop';}
+});
+document.getElementById('pill-chip-clear').addEventListener('click',clearAll);
+document.getElementById('pill-chip-favs').addEventListener('click',()=>{
+  renderFavs();showFavSaveBtn();
+  document.getElementById('fav-sheet').classList.add('open');
+});
+document.getElementById('pill-chip-voice').addEventListener('click',()=>{
+  voiceOn=!voiceOn;
+  const lbl=voiceOn?'🔊 Voice':'🔇 Voice';
+  document.getElementById('chip-voice').textContent=lbl;
+  document.getElementById('pill-chip-voice').textContent=lbl;
+  document.getElementById('chip-voice').classList.toggle('active-chip',voiceOn);
+  if(voiceOn&&currentRoute) speakStep(currentRoute.steps[activeStep]);
+  else window.speechSynthesis?.cancel();
 });
 
 // ═══════════════════════════════════════
