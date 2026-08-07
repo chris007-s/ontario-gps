@@ -1,0 +1,27 @@
+{
+  "name": "Ontario Back-Road GPS",
+  "short_name": "OntarioGPS",
+  "description": "Highway-free GPS for Ontario — avoids all 400-series highways",
+  "start_url": "/ontario-gps/",
+  "scope": "/ontario-gps/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f1219",
+  "theme_color": "#0f1219",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["navigation", "travel"],
+  "lang": "en-CA"
+}
