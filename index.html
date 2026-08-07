@@ -373,7 +373,15 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
   </div>
   <div id="nav-bottom-row">
     <div id="nav-remain"></div>
-    <div style="display:flex;align-items:baseline;gap:3px"><span id="nav-speed">—</span><span style="font-size:11px;opacity:.7">km/h</span></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <!-- Current speed -->
+      <div style="display:flex;align-items:baseline;gap:3px"><span id="nav-speed">—</span><span style="font-size:11px;opacity:.7">km/h</span></div>
+      <!-- Speed limit sign -->
+      <div id="speed-limit-sign" style="display:none;background:#fff;color:#202124;border:3px solid #202124;border-radius:6px;width:38px;height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0">
+        <div style="font-size:8px;font-weight:700;color:#c00;letter-spacing:.5px">MAX</div>
+        <div id="speed-limit-val" style="font-size:16px;font-weight:900;line-height:1;color:#202124">—</div>
+      </div>
+    </div>
     <button id="btn-stop-nav">⏹ Stop</button>
   </div>
 </div>
@@ -741,6 +749,8 @@ function stopDrive(){
   document.getElementById('gps-dot').classList.remove('live');
   document.getElementById('offroute').style.display='none';
   if(posMark){map.removeLayer(posMark);posMark=null;}
+  document.getElementById('speed-limit-sign').style.display='none';
+  lastSpeedLimitFetch=0; lastSpeedLimitLL=null;
   if(currentRoute) showSheet('peek');
   setStat('Tracking stopped.');
 }
@@ -749,6 +759,19 @@ async function onPos(pos){
   const ll={lat:pos.coords.latitude,lng:pos.coords.longitude};
   const spd=pos.coords.speed!=null?Math.round(pos.coords.speed*3.6):null;
   document.getElementById('nav-speed').textContent=spd!==null?spd:'—';
+
+  // Fetch speed limit for current road & check over-limit
+  fetchSpeedLimit(ll);
+  if(spd!==null){
+    const limitEl=document.getElementById('speed-limit-val');
+    const signEl=document.getElementById('speed-limit-sign');
+    const limit=parseInt(limitEl.textContent)||null;
+    if(limit&&signEl.style.display!=='none'){
+      const over = spd > limit;
+      signEl.style.borderColor = over?'#ea4335':'#202124';
+      limitEl.style.color = over?'#ea4335':'#202124';
+    }
+  }
 
   if(posMark) map.removeLayer(posMark);
   posMark=L.marker([ll.lat,ll.lng],{icon:posIcon(),zIndexOffset:1000}).addTo(map);
@@ -1110,6 +1133,90 @@ function delFav(i){
   if(!confirm(`Delete "${favourites[i].name}"?`)) return;
   favourites.splice(i,1); saveFavs(); renderFavs();
 }
+
+// ═══════════════════════════════════════
+//  SPEED LIMIT FETCHER
+// ═══════════════════════════════════════
+let lastSpeedLimitFetch = 0;
+let lastSpeedLimitLL = null;
+const SPEED_LIMIT_INTERVAL = 8000; // fetch every 8 seconds max
+const SPEED_LIMIT_MOVE = 80;       // only re-fetch if moved >80m
+
+async function fetchSpeedLimit(ll){
+  const now = Date.now();
+  // Throttle — only fetch if moved enough and enough time passed
+  if(now - lastSpeedLimitFetch < SPEED_LIMIT_INTERVAL) return;
+  if(lastSpeedLimitLL && haversine(ll, lastSpeedLimitLL) < SPEED_LIMIT_MOVE) return;
+  lastSpeedLimitFetch = now;
+  lastSpeedLimitLL = ll;
+
+  const r = 30; // search radius in metres around current position
+  const q = `[out:json][timeout:5];
+way(around:${r},${ll.lat},${ll.lng})[highway][maxspeed];
+out tags 1;`;
+  try{
+    const resp = await fetch('https://overpass-api.de/api/interpreter',{
+      method:'POST', body:'data='+encodeURIComponent(q),
+      signal: AbortSignal.timeout(6000)
+    });
+    const d = await resp.json();
+    const sign = document.getElementById('speed-limit-sign');
+    const val  = document.getElementById('speed-limit-val');
+    if(d.elements && d.elements.length){
+      const raw = d.elements[0].tags?.maxspeed || '';
+      // Ontario uses km/h — strip "CA:urban" style tags or just show numeric
+      let kmh = raw.replace(/^CA:/i,'').replace(/[^0-9]/g,'');
+      // Handle named limits
+      if(raw.toLowerCase().includes('urban')) kmh='50';
+      if(raw.toLowerCase().includes('rural')) kmh='80';
+      if(raw.toLowerCase().includes('living')) kmh='20';
+      if(kmh){
+        val.textContent = kmh;
+        sign.style.display = 'flex';
+        // Highlight red if over limit
+        const cur = parseInt(document.getElementById('nav-speed').textContent)||0;
+        sign.style.borderColor = cur > parseInt(kmh) ? '#ea4335' : '#202124';
+        val.style.color = cur > parseInt(kmh) ? '#ea4335' : '#202124';
+      } else {
+        sign.style.display = 'none';
+      }
+    } else {
+      sign.style.display = 'none';
+    }
+  }catch(e){
+    // Silent fail — speed limit just won't show
+    console.warn('Speed limit fetch failed:',e.message);
+  }
+}
+
+// ═══════════════════════════════════════
+//  AUTO GPS ON LOAD
+// ═══════════════════════════════════════
+function autoLocateOnLoad(){
+  if(!navigator.geolocation) return;
+  const inp = document.getElementById('inp-from');
+  inp.value = '📍 Locating…';
+  inp.style.color = '#9aa0a6';
+  navigator.geolocation.getCurrentPosition(p=>{
+    const ll = L.latLng(p.coords.latitude, p.coords.longitude);
+    map.setView(ll, 14);
+    placeStart(ll);
+    clickState = 1;
+    inp.value = '📍 My location';
+    inp.style.color = '#1a73e8';
+    document.getElementById('btn-clear-from').style.display = 'block';
+    // Auto-focus destination so user can type right away
+    setTimeout(()=>document.getElementById('inp-to').focus(), 300);
+  }, ()=>{
+    // Permission denied or error — clear placeholder, let them type
+    inp.value = '';
+    inp.style.color = '';
+    inp.placeholder = 'Starting point — tap 📍 or type address';
+  },{enableHighAccuracy:true, timeout:8000});
+}
+
+// Call on page load
+window.addEventListener('load', autoLocateOnLoad);
 
 // ═══════════════════════════════════════
 //  SERVICE WORKER
