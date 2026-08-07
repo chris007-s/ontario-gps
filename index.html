@@ -6,6 +6,7 @@
 <title>Ontario GPS</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1a73e8">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="OntarioGPS">
@@ -115,25 +116,27 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 
 /* Nav card */
 #nav{position:fixed;bottom:0;left:0;right:0;z-index:200;background:#1a73e8;color:#fff;border-radius:20px 20px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,.2);display:none;flex-direction:column}
-#nav-main{display:flex;align-items:center;gap:14px;padding:16px 16px 10px}
-#nav-arrow{font-size:46px;line-height:1;flex-shrink:0}
+#nav-main{display:flex;align-items:center;gap:14px;padding:18px 16px 12px}
+#nav-arrow{font-size:64px;line-height:1;flex-shrink:0}
 #nav-txt{flex:1;min-width:0}
-#nav-street{font-size:20px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#nav-detail{font-size:12px;opacity:.85;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#nav-dist{font-size:26px;font-weight:700;flex-shrink:0}
-#nav-lanes{display:flex;gap:4px;padding:0 16px 6px;flex-wrap:wrap;align-items:center}
-.nlane{font-size:14px;padding:2px 6px;border-radius:5px;background:rgba(255,255,255,.15)}
+#nav-street{font-size:26px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.3px}
+#nav-detail{font-size:13px;opacity:.85;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#nav-dist{font-size:32px;font-weight:800;flex-shrink:0;text-align:right;min-width:80px}
+#nav-turn-label{background:rgba(0,0,0,.2);padding:6px 16px;font-size:13px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;opacity:.9}
+#nav-lanes{display:flex;gap:4px;padding:6px 16px;flex-wrap:wrap;align-items:center}
+.nlane{font-size:16px;padding:3px 8px;border-radius:5px;background:rgba(255,255,255,.15)}
 .nlane.v{background:rgba(255,255,255,.38);font-weight:700}
-#nav-next{background:rgba(0,0,0,.15);padding:7px 16px;font-size:12px;display:none;align-items:center;gap:6px}
-#nav-bottom{display:flex;align-items:center;justify-content:space-between;padding:8px 16px 22px;background:rgba(0,0,0,.1)}
-#nav-remain{font-size:12px;opacity:.85}
+#nav-next{background:rgba(0,0,0,.15);padding:8px 16px;font-size:13px;display:none;align-items:center;gap:6px}
+#nav-bottom{display:flex;align-items:center;justify-content:space-between;padding:10px 16px 24px;background:rgba(0,0,0,.1)}
+#nav-remain{font-size:13px;opacity:.85}
 #nav-spd-wrap{display:flex;align-items:center;gap:8px}
-#nav-spd{font-size:22px;font-weight:700}
-#spd-sign{display:none;background:#fff;border:3px solid #202124;border-radius:6px;width:36px;height:42px;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0}
+#nav-spd{font-size:24px;font-weight:700}
+#spd-sign{display:none;background:#fff;border:3px solid #202124;border-radius:6px;width:38px;height:44px;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0}
 #spd-sign.show{display:flex}
 #spd-max{font-size:7px;font-weight:800;color:#c00;letter-spacing:.5px}
-#spd-val{font-size:15px;font-weight:900;color:#202124;line-height:1}
-#btn-stop{background:rgba(255,255,255,.2);border:none;color:#fff;font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer}
+#spd-val{font-size:16px;font-weight:900;color:#202124;line-height:1}
+#btn-stop{background:rgba(255,255,255,.2);border:none;color:#fff;font-size:13px;font-weight:600;padding:8px 16px;border-radius:20px;cursor:pointer}
+#btn-share-loc{background:rgba(255,255,255,.2);border:none;color:#fff;font-size:18px;padding:6px 10px;border-radius:20px;cursor:pointer}
 
 /* Off-route */
 #offroute{position:fixed;top:0;left:0;right:0;z-index:300;background:#ea4335;color:#fff;text-align:center;padding:9px;font-size:13px;font-weight:700;display:none;animation:flash 1s infinite}
@@ -141,6 +144,47 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 
 /* Voice pip */
 #vpip{position:fixed;top:76px;right:12px;z-index:250;background:#1a73e8;color:#fff;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;display:none;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+
+/* Alternate routes modal */
+#routes-modal{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.45);display:none;align-items:flex-end}
+#routes-modal.open{display:flex}
+#routes-inner{background:#fff;border-radius:20px 20px 0 0;width:100%;padding:16px 0 28px;display:flex;flex-direction:column;max-height:70vh}
+#routes-hdr{display:flex;align-items:center;justify-content:space-between;padding:0 16px 12px;border-bottom:1px solid #f0f0f0;flex-shrink:0}
+#routes-hdr h3{font-size:17px;font-weight:700;color:#202124}
+.route-option{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid #f8f9fa;cursor:pointer}
+.route-option:active,.route-option.selected{background:#e8f0fe}
+.ro-icon{width:42px;height:42px;border-radius:50%;background:#e8f0fe;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.route-option.selected .ro-icon{background:#1a73e8;color:#fff}
+.ro-info{flex:1}
+.ro-time{font-size:17px;font-weight:700;color:#202124}
+.ro-detail{font-size:12px;color:#5f6368;margin-top:2px}
+.ro-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:#e8f0fe;color:#1a73e8}
+.ro-badge.fast{background:#e6f4ea;color:#137333}
+#btn-go-route{margin:12px 16px 0;background:#1a73e8;color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer}
+.rtab{flex:1;background:none;border:none;border-bottom:2px solid transparent;padding:10px 8px;font-size:13px;font-weight:600;color:#5f6368;cursor:pointer}
+.rtab.active{color:#1a73e8;border-bottom-color:#1a73e8}
+#rpanel-via{flex-direction:column}
+
+/* Directions list modal */
+#dir-modal{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.45);display:none;align-items:flex-end}
+#dir-modal.open{display:flex}
+#dir-inner{background:#fff;border-radius:20px 20px 0 0;width:100%;max-height:82vh;display:flex;flex-direction:column;padding-bottom:20px}
+#dir-hdr{display:flex;align-items:center;justify-content:space-between;padding:16px 16px 10px;border-bottom:1px solid #f0f0f0;flex-shrink:0}
+#dir-hdr h3{font-size:17px;font-weight:700;color:#202124}
+#dir-summary-bar{display:flex;gap:20px;padding:10px 16px;background:#f8f9fa;flex-shrink:0}
+.dir-stat{font-size:13px;color:#5f6368}
+.dir-stat strong{color:#202124;font-weight:700}
+#dir-list{flex:1;overflow-y:auto;padding:6px 0}
+.dir-row{display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-bottom:1px solid #f8f9fa;cursor:pointer}
+.dir-row:active{background:#f1f3f4}
+.dir-row.dir-cur{background:#e8f0fe}
+.dir-ic{width:38px;height:38px;border-radius:50%;background:#e8f0fe;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.dir-row.dir-cur .dir-ic{background:#1a73e8}
+.dir-body{flex:1;min-width:0}
+.dir-main{font-size:14px;color:#202124;line-height:1.4}
+.dir-sub{display:flex;gap:8px;margin-top:3px}
+.dir-dist{font-size:12px;color:#5f6368}
+.dir-road{font-size:11px;color:#1a73e8;background:#e8f0fe;padding:1px 6px;border-radius:10px}
 
 /* Favs sheet */
 #fav-sheet{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.4);display:none;align-items:flex-end}
@@ -166,6 +210,50 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 #btn-open-fav-save.show{display:block}
 #no-favs{text-align:center;color:#9aa0a6;padding:28px 16px;font-size:14px}
 
+
+/* Live share modal */
+#share-trip-modal{position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.5);display:none;align-items:flex-end}
+#share-trip-modal.open{display:flex}
+#st-inner{background:#fff;border-radius:20px 20px 0 0;width:100%;padding:20px 16px 32px;display:flex;flex-direction:column;gap:12px}
+#st-inner h3{font-size:17px;font-weight:700;color:#202124}
+.st-tabs{display:flex;border-bottom:1px solid #f0f0f0;margin:0 -16px;padding:0 16px}
+.st-tab{flex:1;padding:10px 4px;text-align:center;font-size:13px;font-weight:600;color:#5f6368;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent}
+.st-tab.active{color:#1a73e8;border-bottom-color:#1a73e8}
+.st-panel{display:none;flex-direction:column;gap:10px}
+.st-panel.show{display:flex}
+#room-code-display{font-size:42px;font-weight:900;letter-spacing:8px;color:#1a73e8;text-align:center;padding:10px 0;background:#f0f4ff;border-radius:12px}
+.st-btn{border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;width:100%}
+.st-btn.blue{background:#1a73e8;color:#fff}
+.st-btn.green{background:#25d366;color:#fff}
+.st-btn.grey{background:#f1f3f4;color:#202124}
+#join-code-inp{border:2px solid #dadce0;border-radius:10px;padding:12px;font-size:24px;font-weight:700;text-align:center;letter-spacing:6px;width:100%;outline:none;color:#1a73e8}
+#join-code-inp:focus{border-color:#1a73e8}
+.member-dot{display:inline-flex;align-items:center;gap:6px;background:#f1f3f4;border-radius:20px;padding:4px 10px;font-size:12px;font-weight:600}
+#members-list{display:flex;flex-wrap:wrap;gap:6px;min-height:32px}
+#st-status{font-size:12px;color:#5f6368;text-align:center}
+
+/* Nearby modal */
+#nearby-modal{position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.5);display:none;align-items:flex-end}
+#nearby-modal.open{display:flex}
+#nb-inner{background:#fff;border-radius:20px 20px 0 0;width:100%;max-height:75vh;display:flex;flex-direction:column;padding-bottom:20px}
+#nb-hdr{display:flex;align-items:center;justify-content:space-between;padding:16px 16px 10px;border-bottom:1px solid #f0f0f0;flex-shrink:0}
+#nb-hdr h3{font-size:17px;font-weight:700;color:#202124}
+#nb-cats{display:flex;gap:8px;padding:10px 16px;overflow-x:auto;scrollbar-width:none;flex-shrink:0;border-bottom:1px solid #f0f0f0}
+#nb-cats::-webkit-scrollbar{display:none}
+.nb-cat{background:#f1f3f4;border:none;border-radius:20px;padding:7px 14px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.nb-cat.active{background:#1a73e8;color:#fff}
+#nb-list{flex:1;overflow-y:auto;padding:6px 0}
+.nb-item{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #f8f9fa;cursor:pointer}
+.nb-item:active{background:#f1f3f4}
+.nb-icon{width:42px;height:42px;border-radius:50%;background:#e8f0fe;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.nb-info{flex:1;min-width:0}
+.nb-name{font-size:14px;font-weight:600;color:#202124;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nb-addr{font-size:11px;color:#5f6368;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nb-dist{font-size:12px;color:#1a73e8;font-weight:600;flex-shrink:0}
+#nb-loading{padding:24px;text-align:center;color:#9aa0a6;font-size:14px}
+
+/* Member markers */
+.member-marker{background:#ea4335;color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3)}
 .leaflet-control-zoom{border:none!important}
 .leaflet-control-zoom a{background:#fff!important;color:#202124!important;border:none!important;border-radius:50%!important;width:40px!important;height:40px!important;line-height:40px!important;font-size:18px!important;box-shadow:0 1px 5px rgba(0,0,0,.22)!important;margin-bottom:6px!important;display:block!important}
 </style>
@@ -196,9 +284,13 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
     <button class="chip blue" id="chip-route">🔍 Route</button>
     <button class="chip green" id="chip-drive">▶ Drive</button>
     <button class="chip on" id="chip-voice">🔊 Voice</button>
+    <button class="chip" id="chip-lang">🇨🇦 EN</button>
     <button class="chip" id="chip-favs">⭐ Favs</button>
+    <button class="chip" id="chip-nearby">📍 Nearby</button>
+    <button class="chip" id="chip-share-trip">👥 Live Share</button>
     <button class="chip" id="chip-clear">✕ Clear</button>
     <span class="nobadge">NO 400-SERIES</span>
+    <span id="quota-pill" style="background:#1e3a1e;color:#4ade80;border-radius:20px;padding:8px 10px;font-size:10px;font-weight:700;white-space:nowrap;flex-shrink:0;display:flex;align-items:center;gap:4px" title="GraphHopper routes remaining today">🔑 <span id="quota-pill-val">…</span></span>
   </div>
 </div>
 
@@ -212,8 +304,12 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 </div>
 <div id="pill-chips">
   <button class="chip blue" id="p-drive">▶ Drive</button>
+  <button class="chip" id="p-directions">📋 Directions</button>
+  <button class="chip" id="p-routes">🔀 Routes</button>
   <button class="chip on" id="p-voice">🔊 Voice</button>
   <button class="chip" id="p-favs">⭐ Favs</button>
+  <button class="chip" id="p-nearby">📍 Nearby</button>
+  <button class="chip" id="p-share-trip">👥 Live Share</button>
   <button class="chip" id="p-clear">✕ Clear</button>
   <span class="nobadge">NO 400-SERIES</span>
 </div>
@@ -239,6 +335,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
       <div><div class="sstat-val" id="s-km">—</div><div class="sstat-lbl">km</div></div>
       <div><div class="sstat-val" id="s-time">—</div><div class="sstat-lbl">time</div></div>
       <div><div class="sstat-val" id="s-turns">—</div><div class="sstat-lbl">turns</div></div>
+      <div><div class="sstat-val" id="s-quota" style="font-size:13px;color:#5f6368">—/500</div><div class="sstat-lbl">routes today</div></div>
     </div>
   </div>
   <div id="sheet-divider"></div>
@@ -249,9 +346,13 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 <div id="nav">
   <div id="nav-main">
     <div id="nav-arrow">⬆</div>
-    <div id="nav-txt"><div id="nav-street">—</div><div id="nav-detail"></div></div>
+    <div id="nav-txt">
+      <div id="nav-street">—</div>
+      <div id="nav-detail"></div>
+    </div>
     <div id="nav-dist">—</div>
   </div>
+  <div id="nav-turn-label">Turn coming up</div>
   <div id="nav-lanes"></div>
   <div id="nav-next"><span>Then:</span><strong id="nav-next-txt"></strong></div>
   <div id="nav-bottom">
@@ -260,7 +361,59 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
       <span id="nav-spd">—</span><span style="font-size:11px;opacity:.7">km/h</span>
       <div id="spd-sign"><div id="spd-max">MAX</div><div id="spd-val">—</div></div>
     </div>
-    <button id="btn-stop">⏹ Stop</button>
+    <div style="display:flex;gap:6px">
+      <button id="btn-share-loc" title="Share live location">📤</button>
+      <button id="btn-stop">⏹ Stop</button>
+    </div>
+  </div>
+</div>
+
+<!-- Alternate routes modal -->
+<div id="routes-modal">
+  <div id="routes-inner">
+    <div id="routes-hdr">
+      <h3>🔀 Choose a Route</h3>
+      <button onclick="closeRoutesModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#5f6368">✕</button>
+    </div>
+    <!-- Style tabs -->
+    <div style="display:flex;gap:0;border-bottom:1px solid #f0f0f0;flex-shrink:0">
+      <button class="rtab active" id="rtab-styles" onclick="showRouteTab('styles')">🗺 Route Styles</button>
+      <button class="rtab" id="rtab-via" onclick="showRouteTab('via')">📍 Add Via Point</button>
+    </div>
+    <!-- Route styles panel -->
+    <div id="rpanel-styles" style="flex:1;overflow-y:auto">
+      <p style="padding:10px 16px 4px;font-size:12px;color:#5f6368">Three different highway-free routes to your destination.</p>
+      <div id="routes-list"></div>
+    </div>
+    <!-- Via point panel -->
+    <div id="rpanel-via" style="display:none;flex:1;padding:16px;display:none;flex-direction:column;gap:12px">
+      <p style="font-size:13px;color:#5f6368;line-height:1.5">Force the route through a specific street or area. Tap the map to place a via point, or type an address.</p>
+      <div style="display:flex;gap:8px">
+        <input id="via-inp" type="text" placeholder="Type via address…" style="flex:1;border:1px solid #dadce0;border-radius:8px;padding:10px 12px;font-size:14px;outline:none;color:#202124"/>
+        <button id="btn-via-search" style="background:#1a73e8;color:#fff;border:none;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer">Go</button>
+      </div>
+      <div style="text-align:center;color:#9aa0a6;font-size:12px">— or —</div>
+      <button id="btn-via-tap" style="background:#f8f9fa;border:1px dashed #dadce0;border-radius:10px;padding:14px;font-size:14px;color:#1a73e8;font-weight:600;cursor:pointer">👆 Tap map to place via point</button>
+      <div id="via-status" style="font-size:12px;color:#5f6368;text-align:center;display:none"></div>
+      <button id="btn-via-clear" style="background:#fff;border:1px solid #dadce0;border-radius:8px;padding:8px;font-size:13px;color:#ea4335;cursor:pointer;display:none">✕ Remove via point</button>
+    </div>
+    <button id="btn-go-route">Go with this route</button>
+  </div>
+</div>
+
+<!-- Directions list modal -->
+<div id="dir-modal">
+  <div id="dir-inner">
+    <div id="dir-hdr">
+      <h3>📋 Turn-by-Turn</h3>
+      <button onclick="document.getElementById('dir-modal').classList.remove('open')" style="background:none;border:none;font-size:20px;cursor:pointer;color:#5f6368">✕</button>
+    </div>
+    <div id="dir-summary-bar">
+      <div class="dir-stat"><strong id="dir-km">—</strong> km</div>
+      <div class="dir-stat"><strong id="dir-time">—</strong> est. time</div>
+      <div class="dir-stat"><strong id="dir-turns">—</strong> turns</div>
+    </div>
+    <div id="dir-list"></div>
   </div>
 </div>
 
@@ -277,17 +430,109 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
   </div>
 </div>
 
+<!-- Share location modal -->
+<!-- Live Share Trip Modal -->
+<div id="share-trip-modal">
+  <div id="st-inner">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <h3>👥 Live Trip Share</h3>
+      <button onclick="closeShareTrip()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#5f6368">✕</button>
+    </div>
+    <div class="st-tabs">
+      <button class="st-tab active" onclick="showSTTab('share')">Share My Trip</button>
+      <button class="st-tab" onclick="showSTTab('join')">Join Someone's Trip</button>
+      <button class="st-tab" onclick="showSTTab('findme')">Find Me</button>
+    </div>
+    <!-- Share panel -->
+    <div class="st-panel show" id="stp-share">
+      <p style="font-size:13px;color:#5f6368">Give this code to family or friends so they can see you on their map in real time.</p>
+      <div id="room-code-display">——</div>
+      <div id="members-list"></div>
+      <div id="st-status">Tap Start to begin broadcasting your location.</div>
+      <button class="st-btn blue" id="btn-start-share">📡 Start Broadcasting</button>
+      <button class="st-btn green" id="btn-wa-share" style="display:none">💬 Send Code via WhatsApp</button>
+      <button class="st-btn grey" id="btn-stop-share" style="display:none">⏹ Stop Broadcasting</button>
+    </div>
+    <!-- Join panel -->
+    <div class="st-panel" id="stp-join">
+      <p style="font-size:13px;color:#5f6368">Enter the 4-digit code from the person you want to follow.</p>
+      <input id="join-code-inp" type="text" maxlength="4" placeholder="0000" inputmode="numeric"/>
+      <button class="st-btn blue" id="btn-join-room">👁 Follow Them</button>
+      <div id="join-status" style="font-size:12px;color:#5f6368;text-align:center"></div>
+      <button class="st-btn grey" id="btn-stop-join" style="display:none">⏹ Stop Following</button>
+    </div>
+    <!-- Find Me panel -->
+    <div class="st-panel" id="stp-findme">
+      <p style="font-size:13px;color:#5f6368">Share your exact current position as a link — useful when you or a family member is lost or needs to be found.</p>
+      <div id="findme-loc" style="font-size:13px;color:#202124;background:#f8f9fa;border-radius:10px;padding:12px;min-height:60px"></div>
+      <button class="st-btn blue" id="btn-findme">📍 Get My Location</button>
+      <button class="st-btn green" id="btn-findme-wa" style="display:none">💬 Send via WhatsApp</button>
+      <button class="st-btn grey" id="btn-findme-copy" style="display:none">📋 Copy Link</button>
+    </div>
+  </div>
+</div>
+
+<!-- Nearby POIs Modal -->
+<div id="nearby-modal">
+  <div id="nb-inner">
+    <div id="nb-hdr">
+      <h3>📍 Nearby</h3>
+      <button onclick="document.getElementById('nearby-modal').classList.remove('open')" style="background:none;border:none;font-size:20px;cursor:pointer;color:#5f6368">✕</button>
+    </div>
+    <div id="nb-cats">
+      <button class="nb-cat active" onclick="loadNearby('fuel')">⛽ Gas</button>
+      <button class="nb-cat" onclick="loadNearby('fast_food')">🍔 Fast Food</button>
+      <button class="nb-cat" onclick="loadNearby('cafe')">☕ Coffee</button>
+      <button class="nb-cat" onclick="loadNearby('pharmacy')">💊 Pharmacy</button>
+      <button class="nb-cat" onclick="loadNearby('hospital')">🏥 Hospital</button>
+      <button class="nb-cat" onclick="loadNearby('parking')">🅿️ Parking</button>
+      <button class="nb-cat" onclick="loadNearby('atm')">🏧 ATM</button>
+      <button class="nb-cat" onclick="loadNearby('supermarket')">🛒 Grocery</button>
+    </div>
+    <div id="nb-list"><div id="nb-loading">Tap a category above</div></div>
+  </div>
+</div>
+
+<div id="share-modal" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.5);align-items:flex-end">
+  <div style="background:#fff;border-radius:20px 20px 0 0;width:100%;padding:20px 16px 32px;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <h3 style="font-size:17px;font-weight:700;color:#202124">📤 Share Live Location</h3>
+      <button onclick="document.getElementById('share-modal').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#5f6368">✕</button>
+    </div>
+    <p style="font-size:13px;color:#5f6368;line-height:1.5">Share your current position with friends so they can track you on Google Maps.</p>
+    <div id="share-link-box" style="background:#f8f9fa;border-radius:10px;padding:12px;font-size:12px;color:#1a73e8;word-break:break-all;font-family:monospace"></div>
+    <div style="display:flex;gap:8px">
+      <button id="btn-copy-link" style="flex:1;background:#1a73e8;color:#fff;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer">📋 Copy Link</button>
+      <button id="btn-whatsapp" style="flex:1;background:#25d366;color:#fff;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer">💬 WhatsApp</button>
+    </div>
+    <p style="font-size:11px;color:#9aa0a6;text-align:center">Link shows your position on Google Maps. Updates when you reshare.</p>
+  </div>
+</div>
+
+<script>
+// ── CONFIG — edit your keys here ──────────────────────────────────────────────
+const GPS_CONFIG = {
+  graphhopperKey: 'YOUR_GRAPHHOPPER_KEY_HERE',
+  firebaseUrl:    'https://ontario-gps-default-rtdb.firebaseio.com',
+  foursquareKey:  'YOUR_FOURSQUARE_KEY_HERE',
+  myName:         'Jo'
+};
+// ─────────────────────────────────────────────────────────────────────────────
+</script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
 // ── Everything inside DOMContentLoaded so map container is ready ──
 
-const GH_KEY = 'LijBPDQGfu7Iiq80ebFCtmgpph68QGC2WSGdOXFk';
+const GH_KEY = (typeof GPS_CONFIG !== 'undefined') ? GPS_CONFIG.graphhopperKey : '';
 const OFFROUTE_M = 60, ARRIVE_M = 40, STEP_M = 35, REROUTE_COOL = 8000;
 
 // State
 let startLL=null, endLL=null, startMk=null, endMk=null, routeLine=null, posMk=null;
 let clickState=0, route=null, stepIdx=0;
 let voiceOn=true, tracking=false, watchId=null;
+let lang='en-CA'; // en-CA or es-MX
 let lastPos=null, lastReroute=0, lastSLFetch=0, lastSLLL=null;
 let favs=[];
 let sheetState='hidden';
@@ -303,6 +548,7 @@ L.control.zoom({position:'bottomleft'}).addTo(map);
 setTimeout(()=>map.invalidateSize(true), 500);
 
 map.on('click', async e => {
+  if(viaPickMode){ await placeVia(e.latlng); return; }
   if(tracking) return;
   if(clickState===0){ placeStart(e.latlng); clickState=1; }
   else if(clickState===1){ placeEnd(e.latlng); clickState=2; await runRoute(); }
@@ -324,14 +570,21 @@ function myIcon(){
 }
 
 // ── MARKERS ───────────────────────────────────────────────────────────────────
-function placeStart(ll){
+function placeStart(ll, label){
   if(startMk) map.removeLayer(startMk);
   startLL = ll;
   startMk = L.marker(ll, {icon:pinIcon('#22c55e','A'), draggable:true}).addTo(map);
-  startMk.on('dragend', async e=>{ startLL=e.target.getLatLng(); if(endLL) await runRoute(); });
+  startMk.on('dragend', async e=>{
+    startLL=e.target.getLatLng();
+    const inp=document.getElementById('inp-from');
+    inp.value=`${startLL.lat.toFixed(5)}, ${startLL.lng.toFixed(5)}`;
+    inp.style.color='#202124';
+    if(endLL) await runRoute();
+  });
   const inp = document.getElementById('inp-from');
-  inp.value = `${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
-  inp.style.color = '#202124';
+  inp.value = label || `${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
+  inp.style.color = label ? '#1a73e8' : '#202124';
+  inp.readOnly = true;
   document.getElementById('clr-from').style.display = 'block';
 }
 function placeEnd(ll){
@@ -456,12 +709,7 @@ function doLocate(){
   navigator.geolocation.getCurrentPosition(p=>{
     const ll = L.latLng(p.coords.latitude, p.coords.longitude);
     map.setView(ll, 14);
-    placeStart(ll);
-    inpFrom.readOnly = true;
-    inpFrom.value = '📍 My location';
-    inpFrom.style.color = '#1a73e8';
-    document.getElementById('clr-from').style.display = 'block';
-    // Focus destination
+    placeStart(ll, '📍 My location');
     setTimeout(()=>document.getElementById('inp-to').focus(), 300);
   }, err=>{
     inpFrom.value = '';
@@ -531,8 +779,9 @@ async function getRoute(start, end){
   url.searchParams.set('key',GH_KEY);
   url.searchParams.append('point',`${start.lat},${start.lng}`);
   url.searchParams.append('point',`${end.lat},${end.lng}`);
-  url.searchParams.set('profile','car');
-  url.searchParams.set('avoid','MOTORWAY|TRUNK');
+  url.searchParams.set('profile','car_avoid_motorway');
+  // car_avoid_motorway is a dedicated GH profile — no avoid param needed
+  // url.searchParams.set('avoid','MOTORWAY|TRUNK'); // redundant with this profile
   url.searchParams.set('points_encoded','false');
   url.searchParams.set('instructions','true');
   url.searchParams.set('locale','en');
@@ -543,7 +792,12 @@ async function getRoute(start, end){
     const d=await r.json();
     if(d.message) throw new Error(d.message);
     return parseGH(d);
-  }catch(e){ console.warn('GH:',e.message); return await osrm(start,end); }
+  }catch(e){
+    console.warn('GH failed:',e.message);
+    document.getElementById('s-km').textContent='HWY';
+    alert('GraphHopper unavailable - using backup router.\n\nThis route MAY include highways.\nCheck your API key quota at graphhopper.com');
+    return await osrm(start,end);
+  }
 }
 
 function parseGH(data){
@@ -583,9 +837,14 @@ function mod2sign(m){return {'uturn':-6,'sharp left':-3,'left':-2,'slight left':
 
 // ── ARROWS ────────────────────────────────────────────────────────────────────
 const ARR={'-6':'↩','-3':'⬅','-2':'↰','-1':'↖','0':'⬆','1':'↗','2':'↱','3':'➡','4':'🏁','5':'📌','6':'↪'};
-const SPK={'-6':'Make a U-turn','-3':'Turn sharp left','-2':'Turn left','-1':'Keep slight left','0':'Continue straight','1':'Keep slight right','2':'Turn right','3':'Turn sharp right','4':'You have arrived','5':'Waypoint reached','6':'Make a U-turn'};
+const SPK_EN={'-6':'Make a U-turn','-3':'Turn sharp left','-2':'Turn left','-1':'Keep slight left','0':'Continue straight','1':'Keep slight right','2':'Turn right','3':'Turn sharp right','4':'You have arrived','5':'Waypoint reached','6':'Make a U-turn'};
+const SPK_ES={'-6':'Dé la vuelta','-3':'Gire completamente a la izquierda','-2':'Gire a la izquierda','-1':'Manténgase a la izquierda','0':'Continúe recto','1':'Manténgase a la derecha','2':'Gire a la derecha','3':'Gire completamente a la derecha','4':'Ha llegado a su destino','5':'Punto de paso alcanzado','6':'Dé la vuelta'};
+const TURN_EN={'-6':'U-Turn','-3':'Sharp Left','-2':'Turn Left','-1':'Keep Left','0':'Continue Straight','1':'Keep Right','2':'Turn Right','3':'Sharp Right','4':'You Have Arrived','5':'Waypoint','6':'U-Turn'};
+const TURN_ES={'-6':'Media vuelta','-3':'Izquierda cerrada','-2':'Gire a la izquierda','-1':'Continúe a la izquierda','0':'Continúe recto','1':'Continúe a la derecha','2':'Gire a la derecha','3':'Derecha cerrada','4':'Ha llegado','5':'Punto de ruta','6':'Media vuelta'};
 const arr=s=>ARR[String(s)]||'⬆';
-const spkDir=s=>SPK[String(s)]||'Continue';
+const spkDir=s=>(lang==='es-MX'?SPK_ES:SPK_EN)[String(s)]||'Continue';
+const turnLbl=s=>(lang==='es-MX'?TURN_ES:TURN_EN)[String(s)]||'';
+
 
 function lanesHTML(lanes){
   if(!lanes) return '';
@@ -603,20 +862,22 @@ function speak(txt){
   if(!voiceOn||!('speechSynthesis' in window)) return;
   window.speechSynthesis.cancel();
   const u=new SpeechSynthesisUtterance(txt);
-  u.lang='en-CA'; u.rate=1.05;
+  u.lang=lang; u.rate=1.05;
   u.onstart=()=>document.getElementById('vpip').style.display='block';
   u.onend=u.onerror=()=>document.getElementById('vpip').style.display='none';
   window.speechSynthesis.speak(u);
 }
 function speakStep(s){
-  const dist=s.distance>=1000?(s.distance/1000).toFixed(1)+' kilometres':(Math.round(s.distance)+' metres');
+  const dist=s.distance>=1000?(s.distance/1000).toFixed(1)+(lang==='es-MX'?' kilómetros':' kilometres'):(Math.round(s.distance)+(lang==='es-MX'?' metros':' metres'));
   let t=spkDir(s.sign);
-  if(s.street&&s.sign!==4) t+=` onto ${s.street}`;
-  if(s.distance>0&&s.sign!==4) t+=`, then continue for ${dist}`;
-  if(s.lanes&&Array.isArray(s.lanes)){const vc=s.lanes.filter(l=>l.valid||l.active).length;if(vc)t+=`. Use ${vc===1?'the':vc} lane${vc>1?'s':''} on the ${s.sign<0?'left':'right'}`;}
+  if(s.street&&s.sign!==4) t+=(lang==='es-MX'?' en ':' onto ')+s.street;
+  if(s.distance>0&&s.sign!==4) t+=(lang==='es-MX'?', luego continúe por ':', then continue for ')+dist;
+  if(s.lanes&&Array.isArray(s.lanes)){
+    const vc=s.lanes.filter(l=>l.valid||l.active).length;
+    if(vc) t+=lang==='es-MX'?`. Use ${vc===1?'el carril':'los carriles'} de la ${s.sign<0?'izquierda':'derecha'}`:`Use the ${s.sign<0?'left':'right'} ${vc===1?'lane':vc+' lanes'}`;
+  }
   speak(t);
 }
-
 // ── DRAW ROUTE ────────────────────────────────────────────────────────────────
 function drawRoute(result){
   route=result; stepIdx=0;
@@ -626,6 +887,11 @@ function drawRoute(result){
     dashArray:result.fallback?'10,7':null, lineCap:'round', lineJoin:'round'
   }).addTo(map);
   if(!tracking) map.fitBounds(routeLine.getBounds(),{padding:[80,80],animate:true});
+
+  // Warn if route appears to use a highway (fallback route)
+  if(result.fallback){
+    document.getElementById('s-km').textContent='⚠ HWY';
+  }
 
   const km=(result.distance/1000).toFixed(1);
   const mins=Math.round(result.duration/60);
@@ -640,14 +906,18 @@ function drawRoute(result){
   showFavBtn();
 
   // Collapse search to pill
-  const dest=document.getElementById('inp-to').value.trim()||'Destination';
-  document.getElementById('pill-dest').textContent=dest;
+  const fromVal=document.getElementById('inp-from').value.trim();
+  const toVal=document.getElementById('inp-to').value.trim();
+  const fromLabel=fromVal.match(/^-?\d+\.\d+/)?'📍 My location':fromVal||'📍 My location';
+  const toLabel=toVal.match(/^-?\d+\.\d+/)?'Destination':toVal||'Destination';
+  document.getElementById('pill-dest').textContent=`${fromLabel} → ${toLabel}`;
   document.getElementById('pill-sub').textContent=`${km} km · ${timeStr} · No 400-series`;
   document.getElementById('pill').classList.add('show');
   document.getElementById('pill-chips').classList.add('show');
   document.getElementById('searchbar').classList.add('hidden');
 
   if(voiceOn) speakStep(result.steps[0]);
+  fetchQuota(); // update remaining count after each route
 }
 
 function renderSteps(){
@@ -669,8 +939,9 @@ function updateNav(idx){
   if(!route||idx<0||idx>=route.steps.length) return;
   const s=route.steps[idx]; stepIdx=idx;
   document.getElementById('nav-arrow').textContent=arr(s.sign);
-  document.getElementById('nav-street').textContent=s.street||s.text.split(' onto ').pop()||'—';
+  document.getElementById('nav-street').textContent=s.street||s.text.split(' onto ').pop()||'-';
   document.getElementById('nav-detail').textContent=s.text;
+  document.getElementById('nav-turn-label').textContent=turnLbl(s.sign)+(s.street?' - '+s.street:'');
   const dist=s.distance>=1000?(s.distance/1000).toFixed(1)+' km':(Math.round(s.distance)+' m');
   document.getElementById('nav-dist').textContent=dist;
   document.getElementById('nav-lanes').innerHTML=lanesHTML(s.lanes);
@@ -728,9 +999,9 @@ function clearAll(){
   document.getElementById('clr-from').style.display='none';
   document.getElementById('clr-to').style.display='none';
   document.getElementById('sheet-steps').innerHTML='';
-  document.getElementById('s-km').textContent='—';
-  document.getElementById('s-time').textContent='—';
-  document.getElementById('s-turns').textContent='—';
+  document.getElementById('s-km').textContent='-';
+  document.getElementById('s-time').textContent='-';
+  document.getElementById('s-turns').textContent='-';
   document.getElementById('pill').classList.remove('show');
   document.getElementById('pill-chips').classList.remove('show');
   document.getElementById('searchbar').classList.remove('hidden');
@@ -794,7 +1065,7 @@ function stopDrive(){
 async function onPos(pos){
   const ll={lat:pos.coords.latitude, lng:pos.coords.longitude};
   const spd=pos.coords.speed!=null?Math.round(pos.coords.speed*3.6):null;
-  document.getElementById('nav-spd').textContent=spd!=null?spd:'—';
+  document.getElementById('nav-spd').textContent=spd!=null?spd:'-';
 
   if(posMk) map.removeLayer(posMk);
   posMk=L.marker([ll.lat,ll.lng],{icon:myIcon(),zIndexOffset:1000}).addTo(map);
@@ -815,8 +1086,9 @@ async function onPos(pos){
       speak('Recalculating route');
       try{
         const r=await getRoute(ll,endLL);
-        startLL=L.latLng(ll.lat,ll.lng);
-        drawRoute(r); startDrive();
+        placeStart(L.latLng(ll.lat,ll.lng), '📍 My location');
+        drawRoute(r);
+        startDrive();
         banner.style.display='none';
       }catch(e){ banner.textContent='⚠ Cannot recalculate: '+e.message; }
     }
@@ -848,9 +1120,7 @@ async function fetchSpeedLimit(ll, curSpd){
   lastSLFetch=now; lastSLLL=ll;
   const q=`[out:json][timeout:5];way(around:30,${ll.lat},${ll.lng})[highway][maxspeed];out tags 1;`;
   try{
-    const r=await fetch('https://overpass-api.de/api/interpreter',{
-      method:'POST',body:'data='+encodeURIComponent(q),signal:AbortSignal.timeout(6000)
-    });
+    const r=await overpassQuery(q); const fakeR={json:()=>Promise.resolve(r)}; const r2=fakeR;
     const d=await r.json();
     const sign=document.getElementById('spd-sign');
     const val=document.getElementById('spd-val');
@@ -972,8 +1242,701 @@ window.loadFav=async function(i){
 window.delFav=function(i){ if(!confirm(`Delete "${favs[i].name}"?`)) return; favs.splice(i,1); saveFavs(); renderFavs(); };
 window.jumpStep=jumpStep;
 
-// ── INIT ──────────────────────────────────────────────────────────────────────
+// ── ALTERNATE ROUTES + VIA POINT ─────────────────────────────────────────────
+let altRoutes = [], selectedRouteIdx = 0;
+let viaLL = null, viaMk = null, viaPickMode = false;
+let altPolylines = [];
+
+function parseGHPath(p){
+  const coords = p.points.coordinates.map(c=>[c[1],c[0]]);
+  const ld=(p.details||{}).lanes||[], rc=(p.details||{}).road_class||[];
+  const laneAt=i=>{for(const s of ld)if(i>=s[0]&&i<s[1])return s[2];return null;};
+  const rcAt=i=>{for(const s of rc)if(i>=s[0]&&i<s[1])return s[2]||'';return '';};
+  const steps=(p.instructions||[]).map(s=>({
+    text:s.text||'Continue', distance:s.distance||0, sign:s.sign||0,
+    street:s.street_name||s.name||'', exit:s.exit_number||null,
+    lanes:laneAt(s.interval?.[0]||0), road:rcAt(s.interval?.[0]||0),
+    ptIdx:s.interval?.[0]||0
+  }));
+  return {coords, steps, distance:p.distance, duration:p.time/1000, src:'GH'};
+}
+
+async function ghRoute(points, opts={}){
+  const url = new URL('https://graphhopper.com/api/1/route');
+  url.searchParams.set('key', GH_KEY);
+  points.forEach(p=>url.searchParams.append('point',`${p.lat},${p.lng}`));
+  url.searchParams.set('profile', opts.profile||'car');
+  url.searchParams.set('avoid', 'MOTORWAY|TRUNK');
+  url.searchParams.set('points_encoded', 'false');
+  url.searchParams.set('instructions', 'true');
+  url.searchParams.set('locale', 'en');
+  url.searchParams.set('details', 'road_class,lanes');
+  if(opts.algorithm) url.searchParams.set('algorithm', opts.algorithm);
+  if(opts.maxPaths)  url.searchParams.set('alternative_route.max_paths', opts.maxPaths);
+  const r = await fetch(url.toString(), {signal:AbortSignal.timeout(15000)});
+  if(!r.ok) throw new Error('GH '+r.status);
+  const d = await r.json();
+  if(d.message) throw new Error(d.message);
+  return d.paths;
+}
+
+async function fetchStyleRoutes(start, end){
+  // 3 different profiles: fastest back-road, shortest, balanced
+  const configs = [
+    {label:'⚡ Fastest back-road', badge:'Fastest', badgeCls:'fast', profile:'car'},
+    {label:'📏 Shortest distance', badge:'Shortest', badgeCls:'', profile:'car_avoid_motorway'},
+    {label:'🌿 Balanced / scenic', badge:'Scenic', badgeCls:'', profile:'car'},
+  ];
+  const results = [];
+  // Route 1: fastest (standard)
+  try{
+    const paths = await ghRoute([start,end]);
+    results.push({...parseGHPath(paths[0]), label:configs[0].label, badge:configs[0].badge, badgeCls:configs[0].badgeCls});
+  }catch(e){console.warn(e);}
+  // Route 2: try alt_route for a different path
+  try{
+    const paths = await ghRoute([start,end],{algorithm:'alternative_route',maxPaths:'2'});
+    if(paths.length>1){
+      results.push({...parseGHPath(paths[1]), label:configs[1].label, badge:configs[1].badge, badgeCls:configs[1].badgeCls});
+    }
+  }catch(e){console.warn(e);}
+  // Route 3: route via a midpoint offset perpendicular to the main line
+  try{
+    const midLat = (start.lat+end.lat)/2 + (end.lng-start.lng)*0.015;
+    const midLng = (start.lng+end.lng)/2 - (end.lat-start.lat)*0.015;
+    const paths = await ghRoute([start,{lat:midLat,lng:midLng},end]);
+    results.push({...parseGHPath(paths[0]), label:configs[2].label, badge:configs[2].badge, badgeCls:configs[2].badgeCls});
+  }catch(e){console.warn(e);}
+  return results;
+}
+
+function clearAltPolylines(){
+  altPolylines.forEach(p=>map.removeLayer(p));
+  altPolylines=[];
+}
+
+function showRoutesModal(routes){
+  altRoutes = routes; selectedRouteIdx = 0;
+  clearAltPolylines();
+  const list = document.getElementById('routes-list');
+  list.innerHTML = routes.length ? routes.map((r,i)=>{
+    const km = (r.distance/1000).toFixed(1);
+    const mins = Math.round(r.duration/60);
+    const hrs = Math.floor(mins/60), rem = mins%60;
+    const timeStr = hrs ? `${hrs}h ${rem}m` : `${mins}m`;
+    const turns = r.steps.filter(s=>Math.abs(s.sign)>=1&&s.sign!==4).length;
+    return `<div class="route-option${i===0?' selected':''}" onclick="selectAltRoute(${i})">
+      <div class="ro-icon">${i===0?'🏆':i===1?'🔀':'🌿'}</div>
+      <div class="ro-info">
+        <div class="ro-time">${timeStr} · ${km} km</div>
+        <div class="ro-detail">${r.label||''} · ${turns} turns</div>
+      </div>
+      <span class="ro-badge ${r.badgeCls||''}">${r.badge||''}</span>
+    </div>`;
+  }).join('') : '<p style="padding:20px 16px;color:#9aa0a6;font-size:14px;text-align:center">No routes found. Try adding a via point.</p>';
+
+  // Draw alternatives faintly on map
+  const colours=['#1a73e8','#f59e0b','#16a34a'];
+  routes.forEach((r,i)=>{
+    const pl=L.polyline(r.coords,{color:colours[i]||'#9aa0a6',weight:i===0?6:4,opacity:i===0?.9:.45,dashArray:i===0?null:'8,5'}).addTo(map);
+    altPolylines.push(pl);
+  });
+  if(routes.length) map.fitBounds(altPolylines[0].getBounds(),{padding:[80,80]});
+
+  document.getElementById('routes-modal').classList.add('open');
+  showRouteTab('styles');
+}
+
+window.selectAltRoute = function(i){
+  selectedRouteIdx = i;
+  document.querySelectorAll('.route-option').forEach((el,j)=>el.classList.toggle('selected',j===i));
+  // Highlight selected on map
+  altPolylines.forEach((pl,j)=>pl.setStyle({weight:j===i?6:4,opacity:j===i?.9:.4}));
+};
+
+function closeRoutesModal(){
+  document.getElementById('routes-modal').classList.remove('open');
+  clearAltPolylines();
+  cancelViaPick();
+}
+
+function showRouteTab(tab){
+  document.getElementById('rtab-styles').classList.toggle('active',tab==='styles');
+  document.getElementById('rtab-via').classList.toggle('active',tab==='via');
+  document.getElementById('rpanel-styles').style.display=tab==='styles'?'block':'none';
+  document.getElementById('rpanel-via').style.display=tab==='via'?'flex':'none';
+}
+window.showRouteTab=showRouteTab;
+
+document.getElementById('btn-go-route').addEventListener('click',()=>{
+  closeRoutesModal();
+  if(viaLL){
+    // Route was already drawn with via point
+  } else {
+    drawRoute(altRoutes[selectedRouteIdx]);
+  }
+});
+
+// ── VIA POINT ─────────────────────────────────────────────────────────────────
+function cancelViaPick(){
+  viaPickMode=false;
+  document.getElementById('btn-via-tap').textContent='👆 Tap map to place via point';
+  map.getContainer().style.cursor='';
+}
+
+document.getElementById('btn-via-tap').addEventListener('click',()=>{
+  if(viaPickMode){ cancelViaPick(); return; }
+  if(!startLL||!endLL){ alert('Plan a route first.'); return; }
+  viaPickMode=true;
+  document.getElementById('btn-via-tap').textContent='✋ Tap the map now… (tap again to cancel)';
+  map.getContainer().style.cursor='crosshair';
+  document.getElementById('routes-modal').classList.remove('open');
+});
+
+document.getElementById('btn-via-search').addEventListener('click', async()=>{
+  const q = document.getElementById('via-inp').value.trim();
+  if(!q) return;
+  try{
+    const res = await geocode(q);
+    await placeVia(L.latLng(res.lat,res.lng));
+  }catch(e){ alert('Address not found: '+e.message); }
+});
+
+document.getElementById('via-inp').addEventListener('keydown',e=>{
+  if(e.key==='Enter') document.getElementById('btn-via-search').click();
+});
+
+document.getElementById('btn-via-clear').addEventListener('click',()=>{
+  if(viaMk){ map.removeLayer(viaMk); viaMk=null; }
+  viaLL=null;
+  document.getElementById('via-status').style.display='none';
+  document.getElementById('btn-via-clear').style.display='none';
+  document.getElementById('via-inp').value='';
+  if(startLL&&endLL) runRoute(); // restore original route
+});
+
+async function placeVia(ll){
+  viaPickMode=false;
+  map.getContainer().style.cursor='';
+  viaLL=ll;
+  if(viaMk) map.removeLayer(viaMk);
+  viaMk=L.marker(ll,{icon:L.divIcon({className:'',iconSize:[24,24],iconAnchor:[12,12],
+    html:'<div style="width:24px;height:24px;border-radius:50%;background:#f59e0b;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">V</div>'
+  })}).addTo(map);
+  const st=document.getElementById('via-status');
+  st.textContent='Via point set - routing...';
+  st.style.display='block';
+  document.getElementById('btn-via-clear').style.display='block';
+  // Route through via point
+  try{
+    const paths=await ghRoute([startLL,viaLL,endLL]);
+    const r=parseGHPath(paths[0]);
+    r.label='📍 Via point route';
+    closeRoutesModal();
+    drawRoute(r);
+  }catch(e){
+    st.textContent='Could not route via that point: '+e.message;
+  }
+}
+
+// ── DIRECTIONS LIST MODAL ─────────────────────────────────────────────────────
+function openDirections(){
+  if(!route){ alert('Plan a route first.'); return; }
+  const km=(route.distance/1000).toFixed(1);
+  const mins=Math.round(route.duration/60);
+  const hrs=Math.floor(mins/60),rem=mins%60;
+  document.getElementById('dir-km').textContent=km;
+  document.getElementById('dir-time').textContent=hrs?`${hrs}h ${rem}m`:`${mins}m`;
+  document.getElementById('dir-turns').textContent=route.steps.filter(s=>Math.abs(s.sign)>=1&&s.sign!==4).length;
+  document.getElementById('dir-list').innerHTML=route.steps.map((s,i)=>{
+    const dist=s.distance>=1000?(s.distance/1000).toFixed(1)+' km':(Math.round(s.distance)+' m');
+    const road=s.street?`<span class="dir-road">${s.street}</span>`:'';
+    return `<div class="dir-row${i===stepIdx?' dir-cur':''}" onclick="jumpStep(${i});document.getElementById('dir-modal').classList.remove('open')">
+      <div class="dir-ic">${arr(s.sign)}</div>
+      <div class="dir-body">
+        <div class="dir-main">${s.text}</div>
+        <div class="dir-sub"><span class="dir-dist">${dist}</span>${road}</div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('dir-modal').classList.add('open');
+  // Scroll to current step
+  setTimeout(()=>{
+    const cur=document.querySelector('.dir-cur');
+    if(cur) cur.scrollIntoView({block:'center',behavior:'smooth'});
+  },100);
+}
+
+document.getElementById('p-directions').addEventListener('click', openDirections);
+document.getElementById('p-routes').addEventListener('click', async()=>{
+  if(!startLL||!endLL){alert('Plan a route first.');return;}
+  document.getElementById('p-routes').textContent='⏳ Loading…';
+  try{
+    const routes=await fetchStyleRoutes(startLL,endLL);
+    showRoutesModal(routes);
+  }catch(e){alert('Could not load routes: '+e.message);}
+  document.getElementById('p-routes').textContent='🔀 Routes';
+});
+
+// ── LANGUAGE TOGGLE ───────────────────────────────────────────────────────────
+document.getElementById('chip-lang').addEventListener('click',()=>{
+  lang = lang==='en-CA' ? 'es-MX' : 'en-CA';
+  const btn = document.getElementById('chip-lang');
+  btn.textContent = lang==='es-MX' ? '🇲🇽 ES' : '🇨🇦 EN';
+  btn.classList.toggle('on', lang==='es-MX');
+  speak(lang==='es-MX' ? 'Cambié al español' : 'Switched to English');
+});
+
+// ── SHARE LIVE LOCATION ───────────────────────────────────────────────────────
+document.getElementById('btn-share-loc').addEventListener('click',()=>{
+  if(!lastPos){ alert('No live position yet - tap Drive first.'); return; }
+  const {lat,lng}=lastPos;
+  const gmapsUrl=`https://www.google.com/maps?q=${lat.toFixed(6)},${lng.toFixed(6)}&z=16`;
+  document.getElementById('share-link-box').textContent=gmapsUrl;
+  document.getElementById('share-modal').style.display='flex';
+});
+
+document.getElementById('btn-copy-link').addEventListener('click',()=>{
+  const link=document.getElementById('share-link-box').textContent;
+  navigator.clipboard.writeText(link).then(()=>{
+    document.getElementById('btn-copy-link').textContent='✅ Copied!';
+    setTimeout(()=>document.getElementById('btn-copy-link').textContent='📋 Copy Link',2000);
+  }).catch(()=>{
+    prompt('Copy this link:',link);
+  });
+});
+
+document.getElementById('btn-whatsapp').addEventListener('click',()=>{
+  const link=document.getElementById('share-link-box').textContent;
+  const msg=encodeURIComponent(`📍 My current location: ${link}`);
+  window.open(`https://wa.me/?text=${msg}`,'_blank');
+});
 syncVoiceBtn();
+
+// ── VOICE FIX — preload best voice on startup ─────────────────────────────────
+let bestVoiceEN = null, bestVoiceES = null;
+function loadVoices(){
+  const voices = window.speechSynthesis.getVoices();
+  if(!voices.length) return;
+  // Best English voices for Canada
+  const enPref = ['Samantha','Karen','Moira','Daniel','Google US English','Microsoft Zira'];
+  const esPref = ['Mónica','Paulina','Jorge','Google español','Microsoft Helena'];
+  bestVoiceEN = voices.find(v=>enPref.some(n=>v.name.includes(n))&&v.lang.startsWith('en'))
+    || voices.find(v=>v.lang.startsWith('en-'));
+  bestVoiceES = voices.find(v=>esPref.some(n=>v.name.includes(n))&&v.lang.startsWith('es'))
+    || voices.find(v=>v.lang.startsWith('es'));
+}
+window.speechSynthesis.onvoiceschanged = loadVoices;
+loadVoices();
+
+// Override speak to use best voice and reset engine on lang switch
+const _origSpeak = speak;
+window._speakFixed = function(txt){
+  if(!voiceOn||!('speechSynthesis' in window)) return;
+  // Full reset to avoid robotic carry-over
+  window.speechSynthesis.cancel();
+  setTimeout(()=>{
+    const u = new SpeechSynthesisUtterance(txt);
+    u.lang = lang;
+    u.rate = 1.0;
+    u.pitch = 1.0;
+    const bestVoice = lang==='es-MX' ? bestVoiceES : bestVoiceEN;
+    if(bestVoice) u.voice = bestVoice;
+    u.onstart=()=>document.getElementById('vpip').style.display='block';
+    u.onend=u.onerror=()=>document.getElementById('vpip').style.display='none';
+    window.speechSynthesis.speak(u);
+  }, 50);
+};
+
+// Patch speak and speakStep to use fixed version
+const speak_orig = speak;
+// Redefine speak globally
+window.speak = window._speakFixed;
+
+// ── FIREBASE LIVE SHARE ───────────────────────────────────────────────────────
+let db = null;
+try{
+  const FB_URL = (typeof GPS_CONFIG!=='undefined'&&GPS_CONFIG.firebaseUrl)
+    ? GPS_CONFIG.firebaseUrl
+    : 'https://ontario-gps-default-rtdb.firebaseio.com';
+
+  if(!firebase.apps.length){
+    firebase.initializeApp({databaseURL: FB_URL});
+  }
+  db = firebase.database();
+
+  // Test connection
+  db.ref('.info/connected').on('value', snap=>{
+    const connected = snap.val();
+    console.log('Firebase connected:', connected);
+    const stStatus = document.getElementById('st-status');
+    if(stStatus){
+      if(connected){
+        stStatus.textContent='Ready - tap Start to begin broadcasting.';
+        stStatus.style.color='#16a34a';
+      } else {
+        stStatus.textContent='Connecting to server…';
+        stStatus.style.color='#f59e0b';
+      }
+    }
+  });
+}catch(e){
+  console.error('Firebase init failed:',e);
+  db = null;
+}
+
+let roomCode = null, shareWatchId = null, isSharing = false;
+let joinedRoom = null, memberMarkers = {};
+
+function genCode(){ return String(Math.floor(1000+Math.random()*9000)); }
+
+function showSTTab(tab){
+  document.querySelectorAll('.st-tab').forEach((t,i)=>t.classList.toggle('active',['share','join','findme'][i]===tab));
+  document.querySelectorAll('.st-panel').forEach(p=>p.classList.remove('show'));
+  document.getElementById('stp-'+tab).classList.add('show');
+}
+window.showSTTab = showSTTab;
+
+function openShareTrip(){
+  document.getElementById('share-trip-modal').classList.add('open');
+  showSTTab('share');
+}
+function closeShareTrip(){
+  document.getElementById('share-trip-modal').classList.remove('open');
+}
+window.closeShareTrip = closeShareTrip;
+
+// ── SHARING MY LOCATION ───────────────────────────────────────────────────────
+document.getElementById('btn-start-share').addEventListener('click',()=>{
+  if(!navigator.geolocation){alert('GPS not available.');return;}
+  if(!db){alert('Live Share not available - check your Firebase URL in config.js.');return;}
+  roomCode = genCode();
+  document.getElementById('room-code-display').textContent = roomCode;
+  document.getElementById('btn-start-share').style.display='none';
+  document.getElementById('btn-stop-share').style.display='block';
+  document.getElementById('btn-wa-share').style.display='block';
+  document.getElementById('st-status').textContent=`Broadcasting on room ${roomCode}…`;
+  isSharing = true;
+
+  // Set room to auto-expire after 4 hours
+  db.ref(`rooms/${roomCode}`).set({
+    created: Date.now(),
+    expires: Date.now() + (4*60*60*1000)
+  });
+
+  // Write my position every 3 seconds
+  shareWatchId = navigator.geolocation.watchPosition(pos=>{
+    const name = (typeof GPS_CONFIG!=='undefined'&&GPS_CONFIG.myName)||'Me';
+    db.ref(`rooms/${roomCode}/members/me`).set({
+      lat:pos.coords.latitude, lng:pos.coords.longitude,
+      name, ts:Date.now()
+    });
+  },{enableHighAccuracy:true,maximumAge:3000});
+
+  // Listen for other members joining
+  db.ref(`rooms/${roomCode}/members`).on('value', snap=>{
+    const members = snap.val()||{};
+    updateMembersList(members);
+    updateMemberMarkers(members, 'me');
+  });
+});
+
+document.getElementById('btn-stop-share').addEventListener('click',()=>{
+  stopSharing();
+});
+
+function stopSharing(){
+  if(shareWatchId) navigator.geolocation.clearWatch(shareWatchId);
+  if(roomCode) db.ref(`rooms/${roomCode}/members/me`).remove();
+  if(roomCode) db.ref(`rooms/${roomCode}/members`).off();
+  isSharing=false; roomCode=null;
+  document.getElementById('btn-start-share').style.display='block';
+  document.getElementById('btn-stop-share').style.display='none';
+  document.getElementById('btn-wa-share').style.display='none';
+  document.getElementById('room-code-display').textContent='--';
+  document.getElementById('st-status').textContent='Tap Start to begin broadcasting.';
+  document.getElementById('members-list').innerHTML='';
+  clearMemberMarkers();
+}
+
+document.getElementById('btn-wa-share').addEventListener('click',()=>{
+  const msg=encodeURIComponent(`📍 Follow my trip! Open ontario-gps.netlify.app, tap 👥 Live Share → Join Someone's Trip and enter code: ${roomCode}`);
+  window.open(`https://wa.me/?text=${msg}`,'_blank');
+});
+
+// ── JOINING SOMEONE'S TRIP ────────────────────────────────────────────────────
+document.getElementById('btn-join-room').addEventListener('click',()=>{
+  const code = document.getElementById('join-code-inp').value.trim();
+  if(code.length!==4){alert('Enter a 4-digit code.');return;}
+  if(!db){alert('Live Share not available - check your Firebase URL in config.js.');return;}
+  joinedRoom = code;
+  document.getElementById('join-status').textContent=`Connecting to room ${code}…`;
+  document.getElementById('btn-join-room').style.display='none';
+  document.getElementById('btn-stop-join').style.display='block';
+
+  // Also broadcast my position into that room
+  if(navigator.geolocation){
+    const myName=(typeof GPS_CONFIG!=='undefined'&&GPS_CONFIG.myName)||'Friend';
+    shareWatchId=navigator.geolocation.watchPosition(pos=>{
+      db.ref(`rooms/${code}/members/${myName}`).set({
+        lat:pos.coords.latitude,lng:pos.coords.longitude,name:myName,ts:Date.now()
+      });
+    },{enableHighAccuracy:true,maximumAge:3000});
+  }
+
+  // Watch everyone in that room
+  db.ref(`rooms/${code}/members`).on('value',snap=>{
+    const members=snap.val()||{};
+    if(!Object.keys(members).length){
+      document.getElementById('join-status').textContent='Room not found or empty. Check the code.';
+      return;
+    }
+    document.getElementById('join-status').textContent=`Connected - ${Object.keys(members).length} member(s) in room`;
+    updateMemberMarkers(members, (typeof GPS_CONFIG!=='undefined'&&GPS_CONFIG.myName)||'Friend');
+    // Pan to first member that isn't me
+    const myName=(typeof GPS_CONFIG!=='undefined'&&GPS_CONFIG.myName)||'Friend';
+    const other=Object.values(members).find(m=>m.name!==myName);
+    if(other) map.setView([other.lat,other.lng],15,{animate:true});
+  });
+});
+
+document.getElementById('btn-stop-join').addEventListener('click',()=>{
+  if(shareWatchId) navigator.geolocation.clearWatch(shareWatchId);
+  if(joinedRoom){
+    const myName=(typeof GPS_CONFIG!=='undefined'&&GPS_CONFIG.myName)||'Friend';
+    db.ref(`rooms/${joinedRoom}/members/${myName}`).remove();
+    db.ref(`rooms/${joinedRoom}/members`).off();
+  }
+  joinedRoom=null;
+  document.getElementById('join-code-inp').value='';
+  document.getElementById('join-status').textContent='';
+  document.getElementById('btn-join-room').style.display='block';
+  document.getElementById('btn-stop-join').style.display='none';
+  clearMemberMarkers();
+});
+
+// ── MEMBER MARKERS ON MAP ─────────────────────────────────────────────────────
+function updateMemberMarkers(members, myKey){
+  Object.entries(members).forEach(([key,m])=>{
+    if(!m.lat||!m.lng) return;
+    const isMe = key===myKey||key==='me';
+    const colour = isMe?'#1a73e8':'#ea4335';
+    const initials = (m.name||'?').substring(0,2).toUpperCase();
+    const icon = L.divIcon({className:'',iconSize:[32,32],iconAnchor:[16,16],
+      html:`<div class="member-marker" style="background:${colour}">${initials}</div>`});
+    if(memberMarkers[key]){
+      memberMarkers[key].setLatLng([m.lat,m.lng]);
+    } else {
+      memberMarkers[key]=L.marker([m.lat,m.lng],{icon,zIndexOffset:900})
+        .bindTooltip(m.name||key,{permanent:false}).addTo(map);
+    }
+  });
+}
+function clearMemberMarkers(){
+  Object.values(memberMarkers).forEach(m=>map.removeLayer(m));
+  memberMarkers={};
+}
+function updateMembersList(members){
+  const colours=['🔵','🔴','🟢','🟡','🟠'];
+  document.getElementById('members-list').innerHTML=Object.values(members).map((m,i)=>
+    `<div class="member-dot">${colours[i]||'⚪'} ${m.name||'Unknown'}</div>`
+  ).join('');
+}
+
+// ── FIND ME ───────────────────────────────────────────────────────────────────
+let findMeLink = null;
+document.getElementById('btn-findme').addEventListener('click',()=>{
+  if(!navigator.geolocation){alert('GPS not available.');return;}
+  document.getElementById('btn-findme').textContent='📍 Locating…';
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const lat=pos.coords.latitude, lng=pos.coords.longitude;
+    // Reverse geocode to get nearest address/POI
+    let label='My location';
+    try{
+      const r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+        {headers:{'User-Agent':'OntarioGPS/4.0'}});
+      const d=await r.json();
+      label=d.display_name?.split(',').slice(0,2).join(',')||label;
+    }catch(e){}
+    // Also check nearest POI via Overpass
+    let poi='';
+    try{
+      const q=`[out:json][timeout:5];node(around:100,${lat},${lng})[name][amenity];out 1;`;
+      const r=await overpassQuery(q);
+      const d=await r.json();
+      if(d.elements?.length) poi=` (near ${d.elements[0].tags.name})`;
+    }catch(e){}
+    findMeLink=`https://www.google.com/maps?q=${lat.toFixed(6)},${lng.toFixed(6)}&z=17`;
+    document.getElementById('findme-loc').innerHTML=
+      `<strong>${label}${poi}</strong><br><span style="font-size:11px;color:#5f6368">${lat.toFixed(6)}, ${lng.toFixed(6)}</span>`;
+    document.getElementById('btn-findme').textContent='🔄 Refresh Location';
+    document.getElementById('btn-findme-wa').style.display='block';
+    document.getElementById('btn-findme-copy').style.display='block';
+  },e=>{
+    document.getElementById('btn-findme').textContent='📍 Get My Location';
+    alert('Could not get location: '+e.message);
+  },{enableHighAccuracy:true,timeout:10000});
+});
+
+document.getElementById('btn-findme-wa').addEventListener('click',()=>{
+  if(!findMeLink) return;
+  const msg=encodeURIComponent(`📍 I'm here: ${findMeLink}`);
+  window.open(`https://wa.me/?text=${msg}`,'_blank');
+});
+document.getElementById('btn-findme-copy').addEventListener('click',()=>{
+  if(!findMeLink) return;
+  navigator.clipboard.writeText(findMeLink)
+    .then(()=>{document.getElementById('btn-findme-copy').textContent='✅ Copied!';
+      setTimeout(()=>document.getElementById('btn-findme-copy').textContent='📋 Copy Link',2000);})
+    .catch(()=>prompt('Copy this:',findMeLink));
+});
+
+// ── NEARBY POIs ───────────────────────────────────────────────────────────────
+let currentNBCat='fuel';
+
+// ── NEARBY — Foursquare Places API (reliable, fast, Canadian POIs) ───────────
+const NB_ICONS={fuel:'⛽',fast_food:'🍔',cafe:'☕',pharmacy:'💊',hospital:'🏥',parking:'🅿️',atm:'🏧',supermarket:'🛒'};
+
+// Foursquare category IDs
+const FS_CATS={
+  fuel:'63be6904847c3692a84b9bb5',           // Gas Station
+  fast_food:'4bf58dd8d48988d16e941735',       // Fast Food Restaurant
+  cafe:'4bf58dd8d48988d16d941735',            // Café / Coffee Shop
+  pharmacy:'4bf58dd8d48988d10f951735',        // Pharmacy
+  hospital:'4bf58dd8d48988d196941735',        // Hospital
+  parking:'4c38df4de52ce0d596b336e1',         // Parking
+  atm:'52f2ab2ebcbc57f1066b8b46',             // ATM
+  supermarket:'52f2ab2ebcbc57f1066b8b45',     // Grocery Store
+};
+
+window.loadNearby = async function(cat){
+  document.querySelectorAll('.nb-cat').forEach(b=>{
+    b.classList.toggle('active', b.getAttribute('onclick')?.includes(`'${cat}'`));
+  });
+
+  // Get position — no route needed
+  let pos=null;
+  if(lastPos){ pos=lastPos; }
+  else if(startLL){ pos={lat:startLL.lat,lng:startLL.lng}; }
+  else {
+    document.getElementById('nb-list').innerHTML='<div id="nb-loading">Getting your location…</div>';
+    try{
+      await new Promise((resolve,reject)=>{
+        navigator.geolocation.getCurrentPosition(p=>{
+          pos={lat:p.coords.latitude,lng:p.coords.longitude};
+          lastPos=pos;
+          resolve();
+        },reject,{enableHighAccuracy:true,timeout:8000});
+      });
+    }catch(e){
+      document.getElementById('nb-list').innerHTML='<div id="nb-loading">Could not get location. Enable GPS.</div>';
+      return;
+    }
+  }
+
+  document.getElementById('nb-list').innerHTML='<div id="nb-loading">Searching nearby…</div>';
+
+  const fsKey = (typeof GPS_CONFIG!=='undefined') ? GPS_CONFIG.foursquareKey : '';
+  if(!fsKey||fsKey==='YOUR_FOURSQUARE_KEY_HERE'){
+    document.getElementById('nb-list').innerHTML='<div id="nb-loading">Add your Foursquare key to the config block at the top of index.html</div>';
+    return;
+  }
+
+  const catId = FS_CATS[cat]||FS_CATS.cafe;
+  const url = `https://api.foursquare.com/v3/places/search?ll=${pos.lat},${pos.lng}&categories=${catId}&radius=2000&limit=15&sort=DISTANCE`;
+
+  try{
+    const r = await fetch(url, {
+      headers:{
+        'Authorization': fsKey,
+        'Accept': 'application/json'
+      },
+      signal: AbortSignal.timeout(8000)
+    });
+    if(!r.ok) throw new Error('Foursquare error: '+r.status);
+    const d = await r.json();
+    renderNearby(d.results||[], pos, cat);
+  }catch(e){
+    document.getElementById('nb-list').innerHTML=`<div id="nb-loading">Search failed - tap a category to retry.<br><small style="color:#bbb">${e.message}</small></div>`;
+    console.warn('Nearby error:',e);
+  }
+};
+
+function haversineLL(a,b){
+  const R=6371000,dLat=(b.lat-a.lat)*Math.PI/180,dLng=(b.lng-a.lng)*Math.PI/180;
+  const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+
+function renderNearby(results, pos, cat){
+  if(!results.length){
+    document.getElementById('nb-list').innerHTML='<div id="nb-loading">Nothing found nearby. Try another category.</div>';
+    return;
+  }
+  document.getElementById('nb-list').innerHTML=results.map(p=>{
+    const lat=p.geocodes?.main?.latitude;
+    const lng=p.geocodes?.main?.longitude;
+    if(!lat||!lng) return '';
+    const dist=haversineLL(pos,{lat,lng});
+    const distStr=dist>=1000?(dist/1000).toFixed(1)+' km':Math.round(dist)+' m';
+    const name=p.name||'Unknown';
+    const addr=[p.location?.address, p.location?.locality].filter(Boolean).join(', ')||'';
+    return `<div class="nb-item" onclick="goToNearby(${lat},${lng},'${name.replace(/'/g,"\'").replace(/"/g,'\"')}')">
+      <div class="nb-icon">${NB_ICONS[cat]||'📍'}</div>
+      <div class="nb-info"><div class="nb-name">${name}</div><div class="nb-addr">${addr}</div></div>
+      <div class="nb-dist">${distStr}</div>
+    </div>`;
+  }).join('');
+}
+
+window.goToNearby = function(lat,lng,name){
+  document.getElementById('nearby-modal').classList.remove('open');
+  map.setView([lat,lng],17,{animate:true});
+  // Set as destination
+  document.getElementById('inp-to').value=name;
+  document.getElementById('clr-to').style.display='block';
+  placeEnd(L.latLng(lat,lng));
+  if(startLL) runRoute();
+};
+
+// ── CHIP HANDLERS FOR NEW BUTTONS ─────────────────────────────────────────────
+document.getElementById('chip-nearby').addEventListener('click',()=>{
+  document.getElementById('nearby-modal').classList.add('open');
+  loadNearby('fuel');
+});
+document.getElementById('chip-share-trip').addEventListener('click', openShareTrip);
+document.getElementById('p-nearby').addEventListener('click',()=>{
+  document.getElementById('nearby-modal').classList.add('open');
+  loadNearby('fuel');
+});
+document.getElementById('p-share-trip').addEventListener('click', openShareTrip);
+
+// ── GRAPHHOPPER QUOTA ────────────────────────────────────────────────────────
+async function fetchQuota(){
+  const pillVal=document.getElementById('quota-pill-val');
+  const pill=document.getElementById('quota-pill');
+  if(!GH_KEY||GH_KEY==='YOUR_GRAPHHOPPER_KEY_HERE'){
+    if(pillVal) pillVal.textContent='no key';
+    if(pill){ pill.style.background='#3a1a1a'; pill.style.color='#ea4335'; }
+    return;
+  }
+  try{
+    const r=await fetch(`https://graphhopper.com/api/1/info?key=${GH_KEY}`,{signal:AbortSignal.timeout(5000)});
+    if(r.ok){
+      if(pillVal) pillVal.textContent='key OK';
+      if(pill){ pill.style.background='#1e3a1e'; pill.style.color='#4ade80'; }
+    } else {
+      if(pillVal) pillVal.textContent='key err';
+      if(pill){ pill.style.background='#3a1a1a'; pill.style.color='#ea4335'; }
+    }
+  }catch(e){
+    if(pillVal) pillVal.textContent='offline';
+    console.warn('GH check:',e.message);
+  }
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+fetchQuota(); // show remaining routes on startup
 // Show location permission banner on load
 setTimeout(()=>{
   if(navigator.geolocation){
