@@ -290,7 +290,7 @@ body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSy
 </head>
 <body>
 
-<div id="map"></div>
+<div id="map" style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:0"></div>
 <div id="offroute">⚠ Off route — recalculating…</div>
 <div id="voice-pip">🔊 Speaking…</div>
 
@@ -452,18 +452,38 @@ let favourites=[];
 let sheetState='hidden'; // hidden | peek | half
 
 // ═══════════════════════════════════════
-//  MAP
+//  MAP — init inside DOMContentLoaded so container has computed size
 // ═══════════════════════════════════════
-const map = L.map('map',{zoomControl:false,attributionControl:true})
-  .setView([43.72,-79.4],12);
+let map;
+document.addEventListener('DOMContentLoaded', ()=>{
+  const mapEl = document.getElementById('map');
+  mapEl.style.position='fixed';
+  mapEl.style.top='0';
+  mapEl.style.left='0';
+  mapEl.style.width='100vw';
+  mapEl.style.height='100vh';
+  mapEl.style.zIndex='0';
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-  attribution:'© <a href="https://www.openstreetmap.org/copyright">OSM</a>',
-  maxZoom:19
-}).addTo(map);
+  map = L.map('map',{zoomControl:false,attributionControl:true})
+    .setView([43.72,-79.4],12);
 
-// Custom zoom — bottom left above fab
-L.control.zoom({position:'bottomleft'}).addTo(map);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'© <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+    maxZoom:19
+  }).addTo(map);
+
+  L.control.zoom({position:'bottomleft'}).addTo(map);
+
+  // Map click handler — defined here so map is in scope
+  map.on('click',async e=>{
+    if(isTracking) return;
+    if(clickState===0){placeStart(e.latlng);clickState=1;setStat('Start set — now tap destination.');}
+    else if(clickState===1){placeEnd(e.latlng);clickState=2;await runRoute();}
+    else{clearAll();placeStart(e.latlng);clickState=1;setStat('Start reset. Tap destination.');}
+  });
+
+  setTimeout(()=>map.invalidateSize(true), 400);
+});
 
 function pinIcon(color,label){
   return L.divIcon({className:'',iconSize:[30,30],iconAnchor:[15,30],
@@ -880,16 +900,6 @@ function placeEnd(ll){
 }
 
 // ═══════════════════════════════════════
-//  MAP CLICK
-// ═══════════════════════════════════════
-map.on('click',async e=>{
-  if(isTracking) return;
-  if(clickState===0){placeStart(e.latlng);clickState=1;setStat('Start set — now tap destination.');}
-  else if(clickState===1){placeEnd(e.latlng);clickState=2;await runRoute();}
-  else{clearAll();placeStart(e.latlng);clickState=1;setStat('Start reset. Tap destination.');}
-});
-
-// ═══════════════════════════════════════
 //  RUN ROUTE
 // ═══════════════════════════════════════
 async function runRoute(){
@@ -1221,23 +1231,15 @@ out tags 1;`;
 //  AUTO GPS ON LOAD — tap triggered (required by Brave/Firefox)
 // ═══════════════════════════════════════
 function autoLocateOnLoad(){
-  // Force map to recalculate its size after render — fixes blank map on Brave
-  setTimeout(()=>{ map.invalidateSize(true); }, 300);
-  setTimeout(()=>{ map.invalidateSize(true); }, 800);
-
   // Voice starts ON — sync button labels
   document.getElementById('chip-voice').textContent='🔊 Voice';
   document.getElementById('chip-voice').classList.add('active-chip');
   document.getElementById('pill-chip-voice').textContent='🔊 Voice';
 
-  const inp = document.getElementById('inp-from');
-  // Show a prominent locate prompt in the from field
-  inp.placeholder = '📍 Tap here or the pin button to use your location';
-
-  // If geolocation available, show a gentle banner prompting location use
-  if(navigator.geolocation){
-    showLocateBanner();
-  }
+  // Show locate banner after map has had time to init
+  setTimeout(()=>{
+    if(navigator.geolocation) showLocateBanner();
+  }, 800);
 }
 
 function showLocateBanner(){
