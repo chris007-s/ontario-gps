@@ -15,11 +15,22 @@
 <style>
 /* ── Reset & base ── */
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+html{width:100%;height:100%}
+body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#e8edf0}
 
 /* ── Map fills everything ── */
-#map{position:fixed;inset:0;z-index:0}
-.leaflet-container{background:#e8edf0}
+#map{
+  position:fixed;
+  top:0;left:0;right:0;bottom:0;
+  width:100%;height:100%;
+  width:100vw;height:100vh;
+  z-index:0;
+}
+.leaflet-container{
+  width:100%!important;
+  height:100%!important;
+  background:#e8edf0;
+}
 
 /* ── Search bar — top overlay ── */
 #searchbar{
@@ -283,6 +294,21 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 <div id="offroute">⚠ Off route — recalculating…</div>
 <div id="voice-pip">🔊 Speaking…</div>
 
+<!-- Location prompt banner -->
+<div id="locate-banner" style="
+  display:none;position:fixed;bottom:90px;left:12px;right:12px;z-index:200;
+  background:#1a73e8;color:#fff;border-radius:14px;
+  padding:14px 16px;box-shadow:0 4px 16px rgba(0,0,0,.25);
+  flex-direction:column;gap:8px;
+">
+  <div style="font-size:14px;font-weight:700">📍 Use your current location?</div>
+  <div style="font-size:12px;opacity:.9">Tap below to set your GPS position as the starting point</div>
+  <div style="display:flex;gap:8px;margin-top:4px">
+    <button onclick="locateMe()" style="flex:1;background:#fff;color:#1a73e8;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer">📍 Use My Location</button>
+    <button onclick="document.getElementById('locate-banner').style.display='none';document.getElementById('inp-from').placeholder='Starting point — type an address';document.getElementById('inp-from').focus()" style="background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:8px;padding:10px;font-size:13px;cursor:pointer">Type address</button>
+  </div>
+</div>
+
 <!-- Search bar -->
 <div id="searchbar">
   <div class="search-card">
@@ -420,7 +446,7 @@ const REROUTE_COOL = 8000;
 let startLL=null, endLL=null;
 let startMark=null, endMark=null, routeLine=null, posMark=null;
 let clickState=0, currentRoute=null, activeStep=0;
-let voiceOn=false, isTracking=false, watchId=null;
+let voiceOn=true, isTracking=false, watchId=null;
 let lastPos=null, lastReroute=0;
 let favourites=[];
 let sheetState='hidden'; // hidden | peek | half
@@ -961,6 +987,8 @@ const fromDropdown = document.getElementById('from-dropdown');
 
 inpFrom.addEventListener('focus', ()=>{
   fromDropdown.style.display = 'block';
+  // If no start set yet, also show the locate banner
+  if(!startLL) showLocateBanner();
 });
 inpFrom.addEventListener('blur', ()=>{
   // Delay so click on dropdown option fires first
@@ -1190,32 +1218,63 @@ out tags 1;`;
 }
 
 // ═══════════════════════════════════════
-//  AUTO GPS ON LOAD
+//  AUTO GPS ON LOAD — tap triggered (required by Brave/Firefox)
 // ═══════════════════════════════════════
 function autoLocateOnLoad(){
-  if(!navigator.geolocation) return;
+  // Force map to recalculate its size after render — fixes blank map on Brave
+  setTimeout(()=>{ map.invalidateSize(true); }, 300);
+  setTimeout(()=>{ map.invalidateSize(true); }, 800);
+
+  // Voice starts ON — sync button labels
+  document.getElementById('chip-voice').textContent='🔊 Voice';
+  document.getElementById('chip-voice').classList.add('active-chip');
+  document.getElementById('pill-chip-voice').textContent='🔊 Voice';
+
+  const inp = document.getElementById('inp-from');
+  // Show a prominent locate prompt in the from field
+  inp.placeholder = '📍 Tap here or the pin button to use your location';
+
+  // If geolocation available, show a gentle banner prompting location use
+  if(navigator.geolocation){
+    showLocateBanner();
+  }
+}
+
+function showLocateBanner(){
+  // Only show if not already located
+  if(startLL) return;
+  const banner = document.getElementById('locate-banner');
+  if(banner) banner.style.display='flex';
+}
+
+function locateMe(){
+  if(!navigator.geolocation){
+    setStat('No geolocation support','#ea4335');
+    return;
+  }
   const inp = document.getElementById('inp-from');
   inp.value = '📍 Locating…';
   inp.style.color = '#9aa0a6';
+  document.getElementById('locate-banner').style.display='none';
   navigator.geolocation.getCurrentPosition(p=>{
     const ll = L.latLng(p.coords.latitude, p.coords.longitude);
     map.setView(ll, 14);
+    map.invalidateSize(true);
     placeStart(ll);
     clickState = 1;
     inp.value = '📍 My location';
     inp.style.color = '#1a73e8';
     document.getElementById('btn-clear-from').style.display = 'block';
-    // Auto-focus destination so user can type right away
+    setStat('Start set — type your destination.');
     setTimeout(()=>document.getElementById('inp-to').focus(), 300);
-  }, ()=>{
-    // Permission denied or error — clear placeholder, let them type
+  }, e=>{
     inp.value = '';
     inp.style.color = '';
-    inp.placeholder = 'Starting point — tap 📍 or type address';
-  },{enableHighAccuracy:true, timeout:8000});
+    inp.placeholder = 'Starting point — type an address';
+    setStat('Location denied — type a start address','#f59e0b');
+  },{enableHighAccuracy:true, timeout:10000});
 }
 
-// Call on page load
 window.addEventListener('load', autoLocateOnLoad);
 
 // ═══════════════════════════════════════
