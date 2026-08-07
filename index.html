@@ -286,11 +286,22 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 <!-- Search bar -->
 <div id="searchbar">
   <div class="search-card">
-    <div class="search-row">
+    <div class="search-row" style="position:relative">
       <span class="search-dot dot-green"></span>
-      <input class="search-input" id="inp-from" placeholder="Starting point" autocomplete="off"/>
-      <button class="search-icon-btn" id="btn-locate" title="Use my location">📍</button>
+      <input class="search-input" id="inp-from" placeholder="Starting point — tap 📍 or type address" autocomplete="off"/>
+      <button class="search-icon-btn" id="btn-locate" title="Use my current GPS location">📍</button>
       <button class="search-clear" id="btn-clear-from" style="display:none">✕</button>
+    </div>
+    <!-- GPS dropdown suggestion -->
+    <div id="from-dropdown" style="display:none;background:#fff;border-top:1px solid #f0f0f0">
+      <div id="from-gps-option" style="display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;border-bottom:1px solid #f8f9fa">
+        <span style="font-size:20px">📍</span>
+        <div>
+          <div style="font-size:14px;font-weight:600;color:#1a73e8">Use my current location</div>
+          <div style="font-size:11px;color:#5f6368">Set your GPS position as start</div>
+        </div>
+      </div>
+      <div id="from-type-hint" style="padding:8px 14px 10px;font-size:12px;color:#9aa0a6">Or keep typing an address above…</div>
     </div>
     <div class="search-divider"></div>
     <div class="search-row">
@@ -921,20 +932,60 @@ document.getElementById('chip-voice').addEventListener('click',()=>{
   else window.speechSynthesis?.cancel();
 });
 
+// ── From field: show dropdown on focus offering GPS or typed address ──────────
+const inpFrom = document.getElementById('inp-from');
+const fromDropdown = document.getElementById('from-dropdown');
+
+inpFrom.addEventListener('focus', ()=>{
+  fromDropdown.style.display = 'block';
+});
+inpFrom.addEventListener('blur', ()=>{
+  // Delay so click on dropdown option fires first
+  setTimeout(()=>{ fromDropdown.style.display='none'; }, 200);
+});
+inpFrom.addEventListener('input', ()=>{
+  document.getElementById('btn-clear-from').style.display = inpFrom.value ? 'block' : 'none';
+  // Show type hint, hide GPS option if user is typing an address
+  const typing = inpFrom.value.trim().length > 0;
+  document.getElementById('from-gps-option').style.display = typing ? 'none' : 'flex';
+  document.getElementById('from-type-hint').style.display = typing ? 'none' : 'block';
+});
+inpFrom.addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('chip-route').click(); });
+
+// GPS option clicked inside dropdown
+document.getElementById('from-gps-option').addEventListener('click', ()=>{
+  fromDropdown.style.display='none';
+  locateMe();
+});
+
 function locateMe(){
   if(!navigator.geolocation){setStat('No geolocation','#ea4335');return;}
+  inpFrom.value='📍 Getting location…';
+  inpFrom.style.color='#1a73e8';
   setStat('Getting location…','#1a73e8');
   navigator.geolocation.getCurrentPosition(p=>{
     const ll=L.latLng(p.coords.latitude,p.coords.longitude);
-    map.setView(ll,15);placeStart(ll);clickState=1;
-    setStat('Start set — tap destination.');
-  },e=>setStat('GPS error: '+e.message,'#ea4335'));
+    map.setView(ll,15);
+    placeStart(ll);
+    clickState=1;
+    inpFrom.value='📍 My location';
+    inpFrom.style.color='#1a73e8';
+    document.getElementById('btn-clear-from').style.display='block';
+    setStat('Start set — type destination.');
+    // Auto-focus destination field
+    document.getElementById('inp-to').focus();
+  }, e=>{
+    inpFrom.value='';
+    inpFrom.style.color='';
+    setStat('GPS error: '+e.message,'#ea4335');
+  },{enableHighAccuracy:true,timeout:8000});
 }
-document.getElementById('btn-locate').addEventListener('click',locateMe);
-document.getElementById('fab-locate').addEventListener('click',locateMe);
+document.getElementById('btn-locate').addEventListener('click', locateMe);
+document.getElementById('fab-locate').addEventListener('click', locateMe);
 
 document.getElementById('btn-clear-from').addEventListener('click',()=>{
   document.getElementById('inp-from').value='';
+  document.getElementById('inp-from').style.color='';
   document.getElementById('btn-clear-from').style.display='none';
   if(startMark){map.removeLayer(startMark);startMark=null;}
   startLL=null; clickState=0;
@@ -946,12 +997,9 @@ document.getElementById('btn-clear-to').addEventListener('click',()=>{
   endLL=null;
 });
 
-[document.getElementById('inp-from'),document.getElementById('inp-to')].forEach(i=>{
-  i.addEventListener('keydown',e=>{if(e.key==='Enter') document.getElementById('chip-route').click();});
-  i.addEventListener('input',()=>{
-    const par=i.id==='inp-from'?'btn-clear-from':'btn-clear-to';
-    document.getElementById(par).style.display=i.value?'block':'none';
-  });
+document.getElementById('inp-to').addEventListener('keydown',e=>{if(e.key==='Enter') document.getElementById('chip-route').click();});
+document.getElementById('inp-to').addEventListener('input',()=>{
+  document.getElementById('btn-clear-to').style.display=document.getElementById('inp-to').value?'block':'none';
 });
 
 // ═══════════════════════════════════════
