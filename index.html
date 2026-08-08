@@ -789,7 +789,7 @@ async function getRoute(start, end){
     return await osrm(start, end);
   }
 
-  const url = 'https://api.openrouteservice.org/v2/directions/driving-car/geojson';
+  const url = 'https://api.openrouteservice.org/v2/directions/driving-car';
   const body = {
     coordinates: [
       [start.lng, start.lat],
@@ -829,11 +829,12 @@ async function getRoute(start, end){
 }
 
 function parseORS(data){
-  // GeoJSON endpoint returns a FeatureCollection
-  const feature = data.features[0];
-  const coords = feature.geometry.coordinates.map(c=>[c[1],c[0]]);
-  const props = feature.properties;
-  const steps = props.segments[0].steps.map(s=>({
+  const route = data.routes[0];
+  // Regular ORS endpoint returns encoded polyline geometry
+  const coords = typeof route.geometry === 'string'
+    ? decodePolyline(route.geometry)
+    : route.geometry?.coordinates?.map(c=>[c[1],c[0]]) || [];
+  const steps = route.segments[0].steps.map(s=>({
     text: s.instruction||'Continue',
     distance: s.distance||0,
     sign: orsTypeToSign(s.type),
@@ -846,8 +847,8 @@ function parseORS(data){
   return {
     coords,
     steps,
-    distance: props.summary.distance,
-    duration: props.summary.duration,
+    distance: route.summary.distance,
+    duration: route.summary.duration,
     src: 'ORS'
   };
 }
