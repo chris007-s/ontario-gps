@@ -290,7 +290,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
     <button class="chip" id="chip-share-trip">👥 Live Share</button>
     <button class="chip" id="chip-clear">✕ Clear</button>
     <span class="nobadge">NO 400-SERIES</span>
-    <span id="quota-pill" style="background:#1e3a1e;color:#4ade80;border-radius:20px;padding:8px 10px;font-size:10px;font-weight:700;white-space:nowrap;flex-shrink:0;display:flex;align-items:center;gap:4px" title="Hopper routes remaining today">🔑 <span id="quota-pill-val">…</span></span>
+    <span id="quota-pill" style="background:#1e3a1e;color:#4ade80;border-radius:20px;padding:8px 10px;font-size:10px;font-weight:700;white-space:nowrap;flex-shrink:0;display:flex;align-items:center;gap:4px" title="GraphHopper routes remaining today">🔑 <span id="quota-pill-val">…</span></span>
   </div>
 </div>
 
@@ -332,10 +332,9 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
   <div id="sheet-handle-wrap" id="sheet-drag">
     <div id="sheet-handle"></div>
     <div id="sheet-stats">
-      <div><div class="sstat-val" id="s-km">—</div><div class="sstat-lbl">km</div></div>
-      <div><div class="sstat-val" id="s-time">—</div><div class="sstat-lbl">time</div></div>
-      <div><div class="sstat-val" id="s-turns">—</div><div class="sstat-lbl">turns</div></div>
-      <div><div class="sstat-val" id="s-quota" style="font-size:13px;color:#5f6368">—/500</div><div class="sstat-lbl">routes today</div></div>
+      <div><div class="sstat-val" id="s-km">-</div><div class="sstat-lbl">km</div></div>
+      <div><div class="sstat-val" id="s-time">-</div><div class="sstat-lbl">time</div></div>
+      <div><div class="sstat-val" id="s-turns">-</div><div class="sstat-lbl">turns</div></div>
     </div>
   </div>
   <div id="sheet-divider"></div>
@@ -515,6 +514,7 @@ const GPS_CONFIG = {
   graphhopperKey: 'd1780565-bd30-47ab-a986-623f4f96228c',
   firebaseUrl:    'https://ontario-gps-default-rtdb.firebaseio.com',
   foursquareKey:  'OGPT4MXUSBG5PHFY0BEQ5OWKMG53BAWR1QAGPTYKGMZ3NQ5R',
+  tomtomKey:      '6577ccc2-c78d-47b7-8385-83616c3dd534',
   myName:         'christo'
 };
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1794,19 +1794,19 @@ document.getElementById('btn-findme-copy').addEventListener('click',()=>{
 // ── NEARBY POIs ───────────────────────────────────────────────────────────────
 let currentNBCat='fuel';
 
-// ── NEARBY — Foursquare Places API (reliable, fast, Canadian POIs) ───────────
+// ── NEARBY — TomTom Places API (free, no card, Canadian POIs) ───────────────
 const NB_ICONS={fuel:'⛽',fast_food:'🍔',cafe:'☕',pharmacy:'💊',hospital:'🏥',parking:'🅿️',atm:'🏧',supermarket:'🛒'};
 
-// Foursquare category IDs
-const FS_CATS={
-  fuel:'63be6904847c3692a84b9bb5',           // Gas Station
-  fast_food:'4bf58dd8d48988d16e941735',       // Fast Food Restaurant
-  cafe:'4bf58dd8d48988d16d941735',            // Café / Coffee Shop
-  pharmacy:'4bf58dd8d48988d10f951735',        // Pharmacy
-  hospital:'4bf58dd8d48988d196941735',        // Hospital
-  parking:'4c38df4de52ce0d596b336e1',         // Parking
-  atm:'52f2ab2ebcbc57f1066b8b46',             // ATM
-  supermarket:'52f2ab2ebcbc57f1066b8b45',     // Grocery Store
+// TomTom category codes
+const TT_CATS={
+  fuel:'7311',           // Petrol/Gasoline Station
+  fast_food:'7315',      // Restaurant (fast food)
+  cafe:'9376',           // Coffee Shop
+  pharmacy:'7326',       // Pharmacy
+  hospital:'7321',       // Hospital
+  parking:'7369',        // Parking Garage/Lot
+  atm:'7397',            // ATM
+  supermarket:'7332',    // Grocery Store
 };
 
 window.loadNearby = async function(cat){
@@ -1819,7 +1819,7 @@ window.loadNearby = async function(cat){
   if(lastPos){ pos=lastPos; }
   else if(startLL){ pos={lat:startLL.lat,lng:startLL.lng}; }
   else {
-    document.getElementById('nb-list').innerHTML='<div id="nb-loading">Getting your location…</div>';
+    document.getElementById('nb-list').innerHTML='<div id="nb-loading">Getting your location...</div>';
     try{
       await new Promise((resolve,reject)=>{
         navigator.geolocation.getCurrentPosition(p=>{
@@ -1834,31 +1834,25 @@ window.loadNearby = async function(cat){
     }
   }
 
-  document.getElementById('nb-list').innerHTML='<div id="nb-loading">Searching nearby…</div>';
+  document.getElementById('nb-list').innerHTML='<div id="nb-loading">Searching nearby...</div>';
 
-  const fsKey = (typeof GPS_CONFIG!=='undefined') ? GPS_CONFIG.foursquareKey : '';
-  if(!fsKey||fsKey==='YOUR_FOURSQUARE_KEY_HERE'){
-    document.getElementById('nb-list').innerHTML='<div id="nb-loading">Add your Foursquare key to the config block at the top of index.html</div>';
+  const ttKey = (typeof GPS_CONFIG!=='undefined') ? GPS_CONFIG.tomtomKey : '';
+  if(!ttKey||ttKey==='YOUR_TOMTOM_KEY_HERE'){
+    document.getElementById('nb-list').innerHTML='<div id="nb-loading">Add your TomTom key to config block in index.html</div>';
     return;
   }
 
-  const catId = FS_CATS[cat]||FS_CATS.cafe;
-  const url = `https://api.foursquare.com/v3/places/search?ll=${pos.lat},${pos.lng}&categories=${catId}&radius=2000&limit=15&sort=DISTANCE`;
+  const catId = TT_CATS[cat]||'7315';
+  const url = `https://api.tomtom.com/search/2/categorySearch/${encodeURIComponent(cat)}.json?lat=${pos.lat}&lon=${pos.lng}&radius=2000&limit=15&categorySet=${catId}&key=${ttKey}`;
 
   try{
-    const r = await fetch(url, {
-      headers:{
-        'Authorization': fsKey,
-        'Accept': 'application/json'
-      },
-      signal: AbortSignal.timeout(8000)
-    });
-    if(!r.ok) throw new Error('Foursquare error: '+r.status);
+    const r = await fetch(url, {signal:AbortSignal.timeout(8000)});
+    if(!r.ok) throw new Error('TomTom error: '+r.status);
     const d = await r.json();
     renderNearby(d.results||[], pos, cat);
   }catch(e){
-    document.getElementById('nb-list').innerHTML=`<div id="nb-loading">Search failed - tap a category to retry.<br><small style="color:#bbb">${e.message}</small></div>`;
-    console.warn('Nearby error:',e);
+    document.getElementById('nb-list').innerHTML=`<div id="nb-loading">Search failed - tap a category to retry.<br><small>${e.message}</small></div>`;
+    console.warn('Nearby error:', e);
   }
 };
 
@@ -1874,13 +1868,13 @@ function renderNearby(results, pos, cat){
     return;
   }
   document.getElementById('nb-list').innerHTML=results.map(p=>{
-    const lat=p.geocodes?.main?.latitude;
-    const lng=p.geocodes?.main?.longitude;
+    const lat=p.position?.lat;
+    const lng=p.position?.lon;
     if(!lat||!lng) return '';
     const dist=haversineLL(pos,{lat,lng});
     const distStr=dist>=1000?(dist/1000).toFixed(1)+' km':Math.round(dist)+' m';
-    const name=p.name||'Unknown';
-    const addr=[p.location?.address, p.location?.locality].filter(Boolean).join(', ')||'';
+    const name=p.poi?.name||'Unknown';
+    const addr=p.address?.freeformAddress||p.address?.streetName||'';
     return `<div class="nb-item" onclick="goToNearby(${lat},${lng},'${name.replace(/'/g,"\'").replace(/"/g,'\"')}')">
       <div class="nb-icon">${NB_ICONS[cat]||'📍'}</div>
       <div class="nb-info"><div class="nb-name">${name}</div><div class="nb-addr">${addr}</div></div>
