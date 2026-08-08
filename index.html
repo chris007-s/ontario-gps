@@ -541,7 +541,7 @@ const browserLang = navigator.language || navigator.userLanguage || 'en';
 let lang = browserLang.toLowerCase().startsWith('es') ? 'es-MX' : 'en-CA';
 let lastPos=null, lastReroute=0, lastSLFetch=0, lastSLLL=null;
 let distanceDriven=0, driveStartLL=null, arrivedFlag=false;
-const MIN_DRIVE_BEFORE_ARRIVE=50; // must travel 50m before arrival can trigger
+const MIN_DRIVE_BEFORE_ARRIVE=200; // must travel 200m before arrival can trigger
 let favs=[];
 let sheetState='hidden';
 let acTimer=null;
@@ -1017,6 +1017,14 @@ function renderSteps(){
 
 function updateNav(idx){
   if(!route||idx<0||idx>=route.steps.length) return;
+  // Skip the final arrival step in nav card unless actually close
+  if(route.steps[idx].sign===4){
+    const distToEnd = endLL ? haversine(
+      {lat:lastPos?.lat||0, lng:lastPos?.lng||0},
+      {lat:endLL.lat, lng:endLL.lng}
+    ) : Infinity;
+    if(distToEnd > ARRIVE_M*3) return; // not close enough to show arrival
+  }
   const s=route.steps[idx]; stepIdx=idx;
   document.getElementById('nav-arrow').textContent=arr(s.sign);
   document.getElementById('nav-street').textContent=s.street||s.text.split(' onto ').pop()||'-';
@@ -1202,14 +1210,15 @@ async function onPos(pos){
 
   // Track distance driven since Drive was tapped
   if(!driveStartLL) driveStartLL=ll;
-  if(lastPos) distanceDriven+=haversine(lastPos,ll);
+  const prevPos = lastPos;
+  if(prevPos) distanceDriven+=haversine(prevPos,ll);
   lastPos=ll;
 
   if(posMk) map.removeLayer(posMk);
   posMk=L.marker([ll.lat,ll.lng],{icon:myIcon(),zIndexOffset:1000}).addTo(map);
 
   // Always follow position while driving — smooth pan at street level
-  const moved = lastPos ? haversine(lastPos,ll) : 999;
+  const moved = prevPos ? haversine(prevPos,ll) : 999;
   if(moved > 5){
     map.setView([ll.lat,ll.lng], 17, {animate:true, duration:0.5});
   }
