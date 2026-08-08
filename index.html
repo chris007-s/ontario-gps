@@ -1239,7 +1239,7 @@ async function onPos(pos){
 
   fetchSpeedLimit(ll, spd);
 
-  if(!route||!endLL) return;
+  if(!route||!endLL||arrivedFlag) return;
   const dist=nearestDist(ll,route.coords);
   const banner=document.getElementById('offroute');
 
@@ -1279,8 +1279,10 @@ async function onPos(pos){
      startDistToEnd > ARRIVE_M*3 &&
      distToEnd<ARRIVE_M){
     arrivedFlag=true;
+    // Stop watch IMMEDIATELY before speaking to prevent re-entry
+    if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
     speak('You have arrived at your destination');
-    stopDrive();
+    setTimeout(()=>stopDrive(), 2000); // delay stop so voice finishes
   }
 }
 
