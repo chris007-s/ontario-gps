@@ -13,7 +13,6 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#e8edf0}
@@ -548,7 +547,7 @@ let sheetState='hidden';
 let acTimer=null;
 
 // ── MAP ──────────────────────────────────────────────────────────────────────
-const map = L.map('map', {zoomControl:false, attributionControl:true, rotate:true, bearing:0})
+const map = L.map('map', {zoomControl:false, attributionControl:true})
   .setView([43.72, -79.4], 12);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution:'© <a href="https://www.openstreetmap.org/copyright">OSM</a>', maxZoom:19
@@ -838,7 +837,7 @@ function parseORS(data){
     ? decodePolyline(route.geometry)
     : route.geometry?.coordinates?.map(c=>[c[1],c[0]]) || [];
   const steps = route.segments[0].steps.map(s=>({
-    text: s.type===11 ? (s.instruction||'Arrive at destination') : (s.instruction||'Continue'),
+    text: s.type===11 ? 'Arrive at destination' : (s.instruction||'Continue'),
     distance: s.distance||0,
     sign: orsTypeToSign(s.type),
     street: s.name||'',
@@ -1160,7 +1159,7 @@ function nearestDist(pos,coords){
 function startDrive(){
   if(!route){ updateWorkflowState(); return; }
   if(!navigator.geolocation){ alert('No geolocation support.'); return; }
-  requestWakeLock(); // prevent screen dimming
+  requestWakeLock();
   tracking=true;
   distanceDriven=0;
   driveStartLL=null;
@@ -1173,13 +1172,14 @@ function startDrive(){
   document.getElementById('nav').style.display='flex';
   document.getElementById('nav').style.flexDirection='column';
   showSheet('hidden');
+  // Zoom in immediately to street level before first GPS update
+  if(startLL) map.setView([startLL.lat, startLL.lng], 17, {animate:true});
   watchId=navigator.geolocation.watchPosition(onPos, onGPSErr,
     {enableHighAccuracy:true, maximumAge:2000, timeout:10000});
 }
 
 function stopDrive(){
   releaseWakeLock();
-  if(map.getBearing && map.getBearing()!==0) map.setBearing(0); // reset to north-up
   if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
   tracking=false;
   document.getElementById('chip-drive').textContent='▶ Drive';
@@ -1206,35 +1206,12 @@ async function onPos(pos){
   lastPos=ll;
 
   if(posMk) map.removeLayer(posMk);
+  posMk=L.marker([ll.lat,ll.lng],{icon:myIcon(),zIndexOffset:1000}).addTo(map);
 
-  // Rotate marker icon to show heading direction
-  const heading = pos.coords.heading;
-  const headingIcon = L.divIcon({className:'',iconSize:[22,22],iconAnchor:[11,11],
-    html:`<div style="width:22px;height:22px;border-radius:50%;background:#1a73e8;border:3px solid #fff;box-shadow:0 0 0 3px rgba(26,115,232,.3),0 2px 8px rgba(0,0,0,.3);position:relative">
-      ${heading!=null&&!isNaN(heading)?`<div style="position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:8px solid #1a73e8"></div>`:''}
-    </div>`});
-  posMk=L.marker([ll.lat,ll.lng],{icon:headingIcon,zIndexOffset:1000}).addTo(map);
-
-  // Only re-centre map if moved more than 10m
+  // Always follow position while driving — smooth pan at street level
   const moved = lastPos ? haversine(lastPos,ll) : 999;
-  if(moved > 10){
-    // Google Maps style — keep dot in lower third, rotate map to heading
-    if(heading!=null&&!isNaN(heading)&&moved>5){
-      // Calculate offset point ahead of user so they see more of the road ahead
-      const offsetDist = 0.003; // degrees ahead
-      const rad = heading * Math.PI/180;
-      const aheadLat = ll.lat + offsetDist * Math.cos(rad);
-      const aheadLng = ll.lng + offsetDist * Math.sin(rad);
-      // Pan to midpoint between user and ahead point (puts user in lower portion)
-      map.setView([
-        ll.lat*0.7 + aheadLat*0.3,
-        ll.lng*0.7 + aheadLng*0.3
-      ], 17, {animate:true, duration:.8});
-      // Rotate map to face direction of travel
-      if(map.getBearing) map.setBearing(heading);
-    } else {
-      map.setView([ll.lat,ll.lng],17,{animate:true,duration:.8});
-    }
+  if(moved > 5){
+    map.setView([ll.lat,ll.lng], 17, {animate:true, duration:0.5});
   }
 
   fetchSpeedLimit(ll, spd);
