@@ -837,7 +837,7 @@ function parseORS(data){
     ? decodePolyline(route.geometry)
     : route.geometry?.coordinates?.map(c=>[c[1],c[0]]) || [];
   const steps = route.segments[0].steps.map(s=>({
-    text: s.instruction||'Continue',
+    text: s.type===11 ? (s.instruction||'Arrive at destination') : (s.instruction||'Continue'),
     distance: s.distance||0,
     sign: orsTypeToSign(s.type),
     street: s.name||'',
@@ -1240,8 +1240,12 @@ async function onPos(pos){
   }
 
   // Only check arrival after driving at least MIN_DRIVE_BEFORE_ARRIVE metres
+  // AND only if we weren't already close to destination when Drive was tapped
+  const distToEnd = haversine(ll,{lat:endLL.lat,lng:endLL.lng});
+  const startDistToEnd = driveStartLL ? haversine(driveStartLL,{lat:endLL.lat,lng:endLL.lng}) : Infinity;
   if(distanceDriven>=MIN_DRIVE_BEFORE_ARRIVE &&
-     haversine(ll,{lat:endLL.lat,lng:endLL.lng})<ARRIVE_M){
+     startDistToEnd > ARRIVE_M*3 && // wasn't already near destination when started
+     distToEnd<ARRIVE_M){
     speak('You have arrived at your destination');
     stopDrive();
   }
