@@ -1996,6 +1996,8 @@ document.getElementById('chip-update').addEventListener('click', async ()=>{
     window.location.reload(true);
   }
 });
+
+document.getElementById('chip-nearby').addEventListener('click',()=>{
   document.getElementById('nearby-modal').classList.add('open');
   loadNearby('fuel');
 });
