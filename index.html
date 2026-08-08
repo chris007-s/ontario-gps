@@ -540,6 +540,8 @@ let voiceOn=true, tracking=false, watchId=null;
 const browserLang = navigator.language || navigator.userLanguage || 'en';
 let lang = browserLang.toLowerCase().startsWith('es') ? 'es-MX' : 'en-CA';
 let lastPos=null, lastReroute=0, lastSLFetch=0, lastSLLL=null;
+let distanceDriven=0, driveStartLL=null;
+const MIN_DRIVE_BEFORE_ARRIVE=50; // must travel 50m before arrival can trigger
 let favs=[];
 let sheetState='hidden';
 let acTimer=null;
@@ -1067,7 +1069,25 @@ async function runRoute(){
 
 // ── CLEAR ─────────────────────────────────────────────────────────────────────
 
-// ── WORKFLOW STATE MANAGER ────────────────────────────────────────────────────
+// ── WAKE LOCK — prevent screen dimming while driving ─────────────────────────
+let wakeLock = null;
+
+async function requestWakeLock(){
+  if(!('wakeLock' in navigator)) return;
+  try{
+    wakeLock = await navigator.wakeLock.request('screen');
+    console.log('Wake lock active');
+  }catch(e){ console.warn('Wake lock failed:', e.message); }
+}
+
+function releaseWakeLock(){
+  if(wakeLock){ wakeLock.release(); wakeLock=null; console.log('Wake lock released'); }
+}
+
+// Re-acquire wake lock if page becomes visible again (e.g. user switches app and back)
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible' && isTracking) requestWakeLock();
+});
 function updateWorkflowState(){
   const hasStart = !!startLL;
   const hasEnd   = !!endLL;
@@ -1139,7 +1159,10 @@ function nearestDist(pos,coords){
 function startDrive(){
   if(!route){ updateWorkflowState(); return; }
   if(!navigator.geolocation){ alert('No geolocation support.'); return; }
+  requestWakeLock(); // prevent screen dimming
   tracking=true;
+  distanceDriven=0; // reset distance counter
+  driveStartLL=null; // reset start position
   document.getElementById('chip-drive').textContent='⏹ Stop';
   document.getElementById('chip-drive').classList.remove('green');
   document.getElementById('chip-drive').classList.add('driving');
@@ -1153,6 +1176,7 @@ function startDrive(){
 }
 
 function stopDrive(){
+  releaseWakeLock(); // allow screen to dim again
   if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
   tracking=false;
   document.getElementById('chip-drive').textContent='▶ Drive';
@@ -1173,10 +1197,14 @@ async function onPos(pos){
   const spd=pos.coords.speed!=null?Math.round(pos.coords.speed*3.6):null;
   document.getElementById('nav-spd').textContent=spd!=null?spd:'-';
 
+  // Track distance driven since Drive was tapped
+  if(!driveStartLL) driveStartLL=ll;
+  if(lastPos) distanceDriven+=haversine(lastPos,ll);
+  lastPos=ll;
+
   if(posMk) map.removeLayer(posMk);
   posMk=L.marker([ll.lat,ll.lng],{icon:myIcon(),zIndexOffset:1000}).addTo(map);
   map.setView([ll.lat,ll.lng],17,{animate:true,duration:.8});
-  lastPos=ll;
 
   fetchSpeedLimit(ll, spd);
 
@@ -1210,7 +1238,10 @@ async function onPos(pos){
       speakStep(route.steps[stepIdx+1]);
     }
   }
-  if(haversine(ll,{lat:endLL.lat,lng:endLL.lng})<ARRIVE_M){
+
+  // Only check arrival after driving at least MIN_DRIVE_BEFORE_ARRIVE metres
+  if(distanceDriven>=MIN_DRIVE_BEFORE_ARRIVE &&
+     haversine(ll,{lat:endLL.lat,lng:endLL.lng})<ARRIVE_M){
     speak('You have arrived at your destination');
     stopDrive();
   }
