@@ -530,7 +530,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 const GH_KEY = (typeof GPS_CONFIG !== 'undefined') ? GPS_CONFIG.graphhopperKey : ''; // kept for reference
 const ORS_KEY = (typeof GPS_CONFIG !== 'undefined') ? GPS_CONFIG.orsKey : '';
-const OFFROUTE_M = 60, ARRIVE_M = 40, STEP_M = 35, REROUTE_COOL = 8000;
+const OFFROUTE_M = 60, ARRIVE_M = 25, STEP_M = 30, REROUTE_COOL = 8000;
 
 // State
 let startLL=null, endLL=null, startMk=null, endMk=null, routeLine=null, posMk=null;
@@ -789,7 +789,7 @@ async function getRoute(start, end){
     return await osrm(start, end);
   }
 
-  const url = 'https://api.openrouteservice.org/v2/directions/driving-car';
+  const url = 'https://api.openrouteservice.org/v2/directions/driving-car/geojson';
   const body = {
     coordinates: [
       [start.lng, start.lat],
@@ -797,7 +797,6 @@ async function getRoute(start, end){
     ],
     instructions: true,
     language: 'en',
-    geometry: true,
     options: {
       avoid_features: ['highways', 'tollways']
     }
@@ -830,22 +829,11 @@ async function getRoute(start, end){
 }
 
 function parseORS(data){
-  const route = data.routes[0];
-  let coords;
-  if(route.geometry && route.geometry.coordinates){
-    // GeoJSON format
-    coords = route.geometry.coordinates.map(c=>[c[1],c[0]]);
-  } else if(typeof route.geometry === 'string'){
-    // Encoded polyline — decode it
-    coords = decodePolyline(route.geometry);
-  } else {
-    // Build coords from waypoints in steps
-    coords = route.segments[0].steps.flatMap(s=>{
-      const wp = s.way_points||[];
-      return wp.map(()=>[0,0]); // fallback
-    });
-  }
-  const steps = route.segments[0].steps.map(s=>({
+  // GeoJSON endpoint returns a FeatureCollection
+  const feature = data.features[0];
+  const coords = feature.geometry.coordinates.map(c=>[c[1],c[0]]);
+  const props = feature.properties;
+  const steps = props.segments[0].steps.map(s=>({
     text: s.instruction||'Continue',
     distance: s.distance||0,
     sign: orsTypeToSign(s.type),
@@ -858,8 +846,8 @@ function parseORS(data){
   return {
     coords,
     steps,
-    distance: route.summary.distance,
-    duration: route.summary.duration,
+    distance: props.summary.distance,
+    duration: props.summary.duration,
     src: 'ORS'
   };
 }
@@ -1237,7 +1225,12 @@ async function fetchSpeedLimit(ll, curSpd){
   lastSLFetch=now; lastSLLL=ll;
   const q=`[out:json][timeout:5];way(around:30,${ll.lat},${ll.lng})[highway][maxspeed];out tags 1;`;
   try{
-    const r=await overpassQuery(q); const fakeR={json:()=>Promise.resolve(r)}; const r2=fakeR;
+    const r=await fetch('https://overpass-api.de/api/interpreter',{
+      method:'POST',
+      body:'data='+encodeURIComponent(q),
+      signal:AbortSignal.timeout(6000)
+    });
+    if(!r.ok) return;
     const d=await r.json();
     const sign=document.getElementById('spd-sign');
     const val=document.getElementById('spd-val');
@@ -1909,7 +1902,10 @@ document.getElementById('btn-findme').addEventListener('click',()=>{
     let poi='';
     try{
       const q=`[out:json][timeout:5];node(around:100,${lat},${lng})[name][amenity];out 1;`;
-      const r=await overpassQuery(q);
+      const r=await fetch('https://overpass-api.de/api/interpreter',{
+        method:'POST',body:'data='+encodeURIComponent(q),
+        signal:AbortSignal.timeout(5000)
+      });
       const d=await r.json();
       if(d.elements?.length) poi=` (near ${d.elements[0].tags.name})`;
     }catch(e){}
