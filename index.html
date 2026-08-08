@@ -785,9 +785,17 @@ async function getRoute(start, end){
   url.searchParams.set('key',GH_KEY);
   url.searchParams.append('point',`${start.lat},${start.lng}`);
   url.searchParams.append('point',`${end.lat},${end.lng}`);
-  url.searchParams.set('profile','car_avoid_motorway');
-  // car_avoid_motorway is a free tier GH profile — avoids motorways by design
-  // avoid=MOTORWAY|TRUNK is a paid feature on GH — do not use
+  url.searchParams.set('profile','car');
+  // Use custom_model to heavily penalize motorways/trunk roads
+  // This is supported on free GH accounts unlike avoid= or car_avoid_motorway
+  const customModel = {
+    "priority": [
+      {"if": "road_class == MOTORWAY", "multiply_by": "0.1"},
+      {"if": "road_class == TRUNK", "multiply_by": "0.1"}
+    ]
+  };
+  url.searchParams.set('custom_model', JSON.stringify(customModel));
+  url.searchParams.set('ch.disable', 'true'); // required for custom_model
   url.searchParams.set('points_encoded','false');
   url.searchParams.set('instructions','true');
   url.searchParams.set('locale','en');
@@ -1303,8 +1311,8 @@ async function ghRoute(points, opts={}){
   const url = new URL('https://graphhopper.com/api/1/route');
   url.searchParams.set('key', GH_KEY);
   points.forEach(p=>url.searchParams.append('point',`${p.lat},${p.lng}`));
-  url.searchParams.set('profile', opts.profile||'car_avoid_motorway');
-  url.searchParams.delete('avoid'); // avoid param is paid — use profile instead
+  url.searchParams.set('profile', opts.profile||'car');
+  url.searchParams.delete('avoid');
   url.searchParams.set('points_encoded', 'false');
   url.searchParams.set('instructions', 'true');
   url.searchParams.set('locale', 'en');
@@ -2032,7 +2040,7 @@ async function fetchQuota(){
       testUrl.searchParams.set('key',GH_KEY);
       testUrl.searchParams.append('point','43.65,-79.38');
       testUrl.searchParams.append('point','43.70,-79.40');
-      testUrl.searchParams.set('profile','car_avoid_motorway');
+      testUrl.searchParams.set('profile','car');
       testUrl.searchParams.set('points_encoded','false');
       const r=await fetch(testUrl.toString(),{signal:AbortSignal.timeout(8000)});
       ghStatus=r.ok;
