@@ -532,7 +532,9 @@ const OFFROUTE_M = 60, ARRIVE_M = 40, STEP_M = 35, REROUTE_COOL = 8000;
 let startLL=null, endLL=null, startMk=null, endMk=null, routeLine=null, posMk=null;
 let clickState=0, route=null, stepIdx=0;
 let voiceOn=true, tracking=false, watchId=null;
-let lang='en-CA'; // en-CA or es-MX
+// Auto-detect language from phone/browser settings
+const browserLang = navigator.language || navigator.userLanguage || 'en';
+let lang = browserLang.toLowerCase().startsWith('es') ? 'es-MX' : 'en-CA';
 let lastPos=null, lastReroute=0, lastSLFetch=0, lastSLLL=null;
 let favs=[];
 let sheetState='hidden';
@@ -1511,8 +1513,9 @@ document.getElementById('btn-whatsapp').addEventListener('click',()=>{
   window.open(`https://wa.me/?text=${msg}`,'_blank');
 });
 syncVoiceBtn();
-
-// ── VOICE FIX — preload best voice on startup ─────────────────────────────────
+// Sync language chip to auto-detected language
+document.getElementById('chip-lang').textContent = lang==='es-MX' ? '🇲🇽 ES' : '🇨🇦 EN';
+document.getElementById('chip-lang').classList.toggle('on', lang==='es-MX');
 let bestVoiceEN = null, bestVoiceES = null;
 function loadVoices(){
   const voices = window.speechSynthesis.getVoices();
