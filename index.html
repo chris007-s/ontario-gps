@@ -818,6 +818,7 @@ async function getRoute(start, end){
     console.log('ORS HTTP:', r.status);
     if(!r.ok) throw new Error(`ORS HTTP ${r.status}: ${text.substring(0,200)}`);
     const d = JSON.parse(text);
+    console.log('ORS response structure:', JSON.stringify(d).substring(0,500));
     if(d.error) throw new Error(`ORS: ${d.error.message||JSON.stringify(d.error)}`);
     return parseORS(d);
   }catch(e){
