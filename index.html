@@ -794,14 +794,17 @@ async function getRoute(start, end){
   url.searchParams.set('details','road_class,lanes');
   try{
     const r=await fetch(url.toString(),{signal:AbortSignal.timeout(15000)});
-    if(!r.ok) throw new Error('GH '+r.status);
-    const d=await r.json();
-    if(d.message) throw new Error(d.message);
+    const text=await r.text();
+    console.log('GH HTTP status:',r.status);
+    console.log('GH response:',text);
+    if(!r.ok) throw new Error(`GH HTTP ${r.status}: ${text.substring(0,200)}`);
+    const d=JSON.parse(text);
+    if(d.message) throw new Error(`GH: ${d.message}`);
     return parseGH(d);
   }catch(e){
-    console.warn('GH failed:',e.message);
+    console.error('GH FAILED:',e.message);
     document.getElementById('s-km').textContent='HWY';
-    alert('GraphHopper unavailable - using backup router.\n\nThis route MAY include highways.\nCheck your API key quota at graphhopper.com');
+    alert('GraphHopper failed:\n\n'+e.message+'\n\nUsing backup router (may include highways).');
     return await osrm(start,end);
   }
 }
@@ -2024,8 +2027,17 @@ async function fetchQuota(){
   try{
     let ghStatus=false, ttStatus=false;
     if(ghOK){
-      const r=await fetch(`https://graphhopper.com/api/1/info?key=${GH_KEY}`,{signal:AbortSignal.timeout(5000)});
+      // Test actual route request not just /info — /info doesn't prove routing works
+      const testUrl=new URL('https://graphhopper.com/api/1/route');
+      testUrl.searchParams.set('key',GH_KEY);
+      testUrl.searchParams.append('point','43.65,-79.38');
+      testUrl.searchParams.append('point','43.70,-79.40');
+      testUrl.searchParams.set('profile','car_avoid_motorway');
+      testUrl.searchParams.set('points_encoded','false');
+      const r=await fetch(testUrl.toString(),{signal:AbortSignal.timeout(8000)});
       ghStatus=r.ok;
+      const txt=await r.text();
+      console.log('GH key test HTTP:',r.status,'response:',txt.substring(0,100));
     }
     if(ttOK){
       const r=await fetch(`https://api.tomtom.com/search/2/categorySearch/coffee.json?lat=43.7&lon=-79.4&limit=1&key=${ttKey}`,{signal:AbortSignal.timeout(5000)});
