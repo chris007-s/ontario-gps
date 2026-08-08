@@ -517,6 +517,9 @@ const GPS_CONFIG = {
   tomtomKey:      '6577ccc2-c78d-47b7-8385-83616c3dd534',
   myName:         'christo'
 };
+
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 </script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -1909,25 +1912,33 @@ document.getElementById('p-share-trip').addEventListener('click', openShareTrip)
 async function fetchQuota(){
   const pillVal=document.getElementById('quota-pill-val');
   const pill=document.getElementById('quota-pill');
-  if(!GH_KEY||GH_KEY==='YOUR_GRAPHHOPPER_KEY_HERE'){
-    if(pillVal) pillVal.textContent='no key';
+  const ghOK = GH_KEY && GH_KEY!=='YOUR_GRAPHHOPPER_KEY_HERE';
+  const ttKey = (typeof GPS_CONFIG!=='undefined') ? GPS_CONFIG.tomtomKey : '';
+  const ttOK = ttKey && ttKey!=='YOUR_TOMTOM_KEY_HERE';
+  if(!ghOK&&!ttOK){
+    if(pillVal) pillVal.textContent='no keys';
     if(pill){ pill.style.background='#3a1a1a'; pill.style.color='#ea4335'; }
     return;
   }
   try{
-    const r=await fetch(`https://graphhopper.com/api/1/info?key=${GH_KEY}`,{signal:AbortSignal.timeout(5000)});
-    if(r.ok){
-      if(pillVal) pillVal.textContent='key OK';
-      if(pill){ pill.style.background='#1e3a1e'; pill.style.color='#4ade80'; }
-    } else {
-      if(pillVal) pillVal.textContent='key err';
-      if(pill){ pill.style.background='#3a1a1a'; pill.style.color='#ea4335'; }
+    let ghStatus=false, ttStatus=false;
+    if(ghOK){
+      const r=await fetch(`https://graphhopper.com/api/1/info?key=${GH_KEY}`,{signal:AbortSignal.timeout(5000)});
+      ghStatus=r.ok;
     }
+    if(ttOK){
+      const r=await fetch(`https://api.tomtom.com/search/2/categorySearch/coffee.json?lat=43.7&lon=-79.4&limit=1&key=${ttKey}`,{signal:AbortSignal.timeout(5000)});
+      ttStatus=r.ok;
+    }
+    const allOK=(!ghOK||ghStatus)&&(!ttOK||ttStatus);
+    if(pillVal) pillVal.textContent=allOK?'keys OK':'key err';
+    if(pill){ pill.style.background=allOK?'#1e3a1e':'#3a1a1a'; pill.style.color=allOK?'#4ade80':'#ea4335'; }
   }catch(e){
     if(pillVal) pillVal.textContent='offline';
-    console.warn('GH check:',e.message);
+    console.warn('Key check:',e.message);
   }
 }
+
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 fetchQuota(); // show remaining routes on startup
