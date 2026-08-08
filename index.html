@@ -797,10 +797,10 @@ async function getRoute(start, end){
     ],
     instructions: true,
     language: 'en',
+    geometry: true,
     options: {
       avoid_features: ['highways', 'tollways']
-    },
-    extra_info: ['roadaccessrestrictions']
+    }
   };
 
   try{
@@ -831,7 +831,20 @@ async function getRoute(start, end){
 
 function parseORS(data){
   const route = data.routes[0];
-  const coords = route.geometry.coordinates.map(c=>[c[1],c[0]]);
+  let coords;
+  if(route.geometry && route.geometry.coordinates){
+    // GeoJSON format
+    coords = route.geometry.coordinates.map(c=>[c[1],c[0]]);
+  } else if(typeof route.geometry === 'string'){
+    // Encoded polyline — decode it
+    coords = decodePolyline(route.geometry);
+  } else {
+    // Build coords from waypoints in steps
+    coords = route.segments[0].steps.flatMap(s=>{
+      const wp = s.way_points||[];
+      return wp.map(()=>[0,0]); // fallback
+    });
+  }
   const steps = route.segments[0].steps.map(s=>({
     text: s.instruction||'Continue',
     distance: s.distance||0,
@@ -849,6 +862,23 @@ function parseORS(data){
     duration: route.summary.duration,
     src: 'ORS'
   };
+}
+
+function decodePolyline(encoded, precision=5){
+  // Decode Google-style encoded polyline
+  let index=0, lat=0, lng=0;
+  const coords=[];
+  const factor=Math.pow(10,precision);
+  while(index<encoded.length){
+    let b,shift=0,result=0;
+    do{ b=encoded.charCodeAt(index++)-63; result|=(b&0x1f)<<shift; shift+=5; }while(b>=0x20);
+    lat+=(result&1)?~(result>>1):(result>>1);
+    shift=0; result=0;
+    do{ b=encoded.charCodeAt(index++)-63; result|=(b&0x1f)<<shift; shift+=5; }while(b>=0x20);
+    lng+=(result&1)?~(result>>1):(result>>1);
+    coords.push([lat/factor, lng/factor]);
+  }
+  return coords;
 }
 
 function orsTypeToSign(type){
