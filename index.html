@@ -514,6 +514,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 // ── CONFIG — edit your keys here ──────────────────────────────────────────────
 const GPS_CONFIG = {
   graphhopperKey: 'd1780565-bd30-47ab-a986-623f4f96228c',
+  orsKey:         'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjQxNWIwMWExNjgzNDQyZjM5MGM3ZWUzNjQ1N2ZkOTJjIiwiaCI6Im11cm11cjY0In0=',
   firebaseUrl:    'https://ontario-gps-default-rtdb.firebaseio.com',
   foursquareKey:  'OGPT4MXUSBG5PHFY0BEQ5OWKMG53BAWR1QAGPTYKGMZ3NQ5R',
   tomtomKey:      '6CjyhrUhr6acXHhP6xb1f6epWOYP60Mx',
@@ -527,7 +528,8 @@ const GPS_CONFIG = {
 document.addEventListener('DOMContentLoaded', function() {
 // ── Everything inside DOMContentLoaded so map container is ready ──
 
-const GH_KEY = (typeof GPS_CONFIG !== 'undefined') ? GPS_CONFIG.graphhopperKey : '';
+const GH_KEY = (typeof GPS_CONFIG !== 'undefined') ? GPS_CONFIG.graphhopperKey : ''; // kept for reference
+const ORS_KEY = (typeof GPS_CONFIG !== 'undefined') ? GPS_CONFIG.orsKey : '';
 const OFFROUTE_M = 60, ARRIVE_M = 40, STEP_M = 35, REROUTE_COOL = 8000;
 
 // State
@@ -779,42 +781,80 @@ document.getElementById('clr-to').addEventListener('click', ()=>{
   hideAC();
 });
 
-// ── ROUTING ───────────────────────────────────────────────────────────────────
+// ── ROUTING — OpenRouteService (free, supports highway avoidance) ─────────────
 async function getRoute(start, end){
-  const url=new URL('https://graphhopper.com/api/1/route');
-  url.searchParams.set('key',GH_KEY);
-  url.searchParams.append('point',`${start.lat},${start.lng}`);
-  url.searchParams.append('point',`${end.lat},${end.lng}`);
-  url.searchParams.set('profile','car');
-  // Use custom_model to heavily penalize motorways/trunk roads
-  // This is supported on free GH accounts unlike avoid= or car_avoid_motorway
-  const customModel = {
-    "priority": [
-      {"if": "road_class == MOTORWAY", "multiply_by": "0.1"},
-      {"if": "road_class == TRUNK", "multiply_by": "0.1"}
-    ]
-  };
-  url.searchParams.set('custom_model', JSON.stringify(customModel));
-  url.searchParams.set('ch.disable', 'true'); // required for custom_model
-  url.searchParams.set('points_encoded','false');
-  url.searchParams.set('instructions','true');
-  url.searchParams.set('locale','en');
-  url.searchParams.set('details','road_class,lanes');
-  try{
-    const r=await fetch(url.toString(),{signal:AbortSignal.timeout(15000)});
-    const text=await r.text();
-    console.log('GH HTTP status:',r.status);
-    console.log('GH response:',text);
-    if(!r.ok) throw new Error(`GH HTTP ${r.status}: ${text.substring(0,200)}`);
-    const d=JSON.parse(text);
-    if(d.message) throw new Error(`GH: ${d.message}`);
-    return parseGH(d);
-  }catch(e){
-    console.error('GH FAILED:',e.message);
-    document.getElementById('s-km').textContent='HWY';
-    alert('GraphHopper failed:\n\n'+e.message+'\n\nUsing backup router (may include highways).');
-    return await osrm(start,end);
+  const orsKey = (typeof GPS_CONFIG!=='undefined') ? GPS_CONFIG.orsKey : '';
+  if(!orsKey||orsKey==='YOUR_ORS_KEY_HERE'){
+    console.warn('ORS key missing — using OSRM fallback');
+    return await osrm(start, end);
   }
+
+  const url = 'https://api.openrouteservice.org/v2/directions/driving-car';
+  const body = {
+    coordinates: [
+      [start.lng, start.lat],
+      [end.lng, end.lat]
+    ],
+    instructions: true,
+    language: 'en',
+    options: {
+      avoid_features: ['highways', 'tollways']
+    },
+    extra_info: ['roadaccessrestrictions']
+  };
+
+  try{
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': orsKey,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000)
+    });
+    const text = await r.text();
+    console.log('ORS HTTP:', r.status);
+    if(!r.ok) throw new Error(`ORS HTTP ${r.status}: ${text.substring(0,200)}`);
+    const d = JSON.parse(text);
+    if(d.error) throw new Error(`ORS: ${d.error.message||JSON.stringify(d.error)}`);
+    return parseORS(d);
+  }catch(e){
+    console.error('ORS FAILED:', e.message);
+    document.getElementById('s-km').textContent='HWY';
+    alert('Routing failed:\n\n'+e.message+'\n\nUsing backup router (may include highways).');
+    return await osrm(start, end);
+  }
+}
+
+function parseORS(data){
+  const route = data.routes[0];
+  const coords = route.geometry.coordinates.map(c=>[c[1],c[0]]);
+  const steps = route.segments[0].steps.map(s=>({
+    text: s.instruction||'Continue',
+    distance: s.distance||0,
+    sign: orsTypeToSign(s.type),
+    street: s.name||'',
+    exit: s.exit_number||null,
+    lanes: null,
+    road: '',
+    ptIdx: s.way_points?.[0]||0
+  }));
+  return {
+    coords,
+    steps,
+    distance: route.summary.distance,
+    duration: route.summary.duration,
+    src: 'ORS'
+  };
+}
+
+function orsTypeToSign(type){
+  // ORS step types: 0=left, 1=right, 2=sharp left, 3=sharp right,
+  // 4=slight left, 5=slight right, 6=straight, 7=roundabout, 10=uturn
+  const map={0:-2,1:2,2:-3,3:3,4:-1,5:1,6:0,7:0,10:-6,11:4};
+  return map[type]??0;
 }
 
 function parseGH(data){
@@ -2024,7 +2064,8 @@ document.getElementById('p-share-trip').addEventListener('click', openShareTrip)
 async function fetchQuota(){
   const pillVal=document.getElementById('quota-pill-val');
   const pill=document.getElementById('quota-pill');
-  const ghOK = GH_KEY && GH_KEY!=='YOUR_GRAPHHOPPER_KEY_HERE';
+  const orsKey=(typeof GPS_CONFIG!=='undefined')?GPS_CONFIG.orsKey:'';
+  const ghOK = orsKey && orsKey!=='YOUR_ORS_KEY_HERE';
   const ttKey = (typeof GPS_CONFIG!=='undefined') ? GPS_CONFIG.tomtomKey : '';
   const ttOK = ttKey && ttKey!=='YOUR_TOMTOM_KEY_HERE';
   if(!ghOK&&!ttOK){
@@ -2035,17 +2076,19 @@ async function fetchQuota(){
   try{
     let ghStatus=false, ttStatus=false;
     if(ghOK){
-      // Test actual route request not just /info — /info doesn't prove routing works
-      const testUrl=new URL('https://graphhopper.com/api/1/route');
-      testUrl.searchParams.set('key',GH_KEY);
-      testUrl.searchParams.append('point','43.65,-79.38');
-      testUrl.searchParams.append('point','43.70,-79.40');
-      testUrl.searchParams.set('profile','car');
-      testUrl.searchParams.set('points_encoded','false');
-      const r=await fetch(testUrl.toString(),{signal:AbortSignal.timeout(8000)});
-      ghStatus=r.ok;
-      const txt=await r.text();
-      console.log('GH key test HTTP:',r.status,'response:',txt.substring(0,100));
+      // Test ORS key with a small route request
+      const orsKey=(typeof GPS_CONFIG!=='undefined')?GPS_CONFIG.orsKey:'';
+      const orsOK=orsKey&&orsKey!=='YOUR_ORS_KEY_HERE';
+      if(orsOK){
+        const r=await fetch('https://api.openrouteservice.org/v2/directions/driving-car',{
+          method:'POST',
+          headers:{'Authorization':orsKey,'Content-Type':'application/json'},
+          body:JSON.stringify({coordinates:[[-79.38,43.65],[-79.40,43.70]],instructions:false,options:{avoid_features:['highways','tollways']}}),
+          signal:AbortSignal.timeout(8000)
+        });
+        ghStatus=r.ok;
+        console.log('ORS key test HTTP:',r.status);
+      }
     }
     if(ttOK){
       const r=await fetch(`https://api.tomtom.com/search/2/categorySearch/coffee.json?lat=43.7&lon=-79.4&limit=1&key=${ttKey}`,{signal:AbortSignal.timeout(5000)});
