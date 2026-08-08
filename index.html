@@ -13,6 +13,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#e8edf0}
@@ -540,14 +541,14 @@ let voiceOn=true, tracking=false, watchId=null;
 const browserLang = navigator.language || navigator.userLanguage || 'en';
 let lang = browserLang.toLowerCase().startsWith('es') ? 'es-MX' : 'en-CA';
 let lastPos=null, lastReroute=0, lastSLFetch=0, lastSLLL=null;
-let distanceDriven=0, driveStartLL=null;
+let distanceDriven=0, driveStartLL=null, arrivedFlag=false;
 const MIN_DRIVE_BEFORE_ARRIVE=50; // must travel 50m before arrival can trigger
 let favs=[];
 let sheetState='hidden';
 let acTimer=null;
 
 // ── MAP ──────────────────────────────────────────────────────────────────────
-const map = L.map('map', {zoomControl:false, attributionControl:true})
+const map = L.map('map', {zoomControl:false, attributionControl:true, rotate:true, bearing:0})
   .setView([43.72, -79.4], 12);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution:'© <a href="https://www.openstreetmap.org/copyright">OSM</a>', maxZoom:19
@@ -1161,8 +1162,9 @@ function startDrive(){
   if(!navigator.geolocation){ alert('No geolocation support.'); return; }
   requestWakeLock(); // prevent screen dimming
   tracking=true;
-  distanceDriven=0; // reset distance counter
-  driveStartLL=null; // reset start position
+  distanceDriven=0;
+  driveStartLL=null;
+  arrivedFlag=false;
   document.getElementById('chip-drive').textContent='⏹ Stop';
   document.getElementById('chip-drive').classList.remove('green');
   document.getElementById('chip-drive').classList.add('driving');
@@ -1176,7 +1178,8 @@ function startDrive(){
 }
 
 function stopDrive(){
-  releaseWakeLock(); // allow screen to dim again
+  releaseWakeLock();
+  if(map.getBearing && map.getBearing()!==0) map.setBearing(0); // reset to north-up
   if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
   tracking=false;
   document.getElementById('chip-drive').textContent='▶ Drive';
@@ -1203,8 +1206,36 @@ async function onPos(pos){
   lastPos=ll;
 
   if(posMk) map.removeLayer(posMk);
-  posMk=L.marker([ll.lat,ll.lng],{icon:myIcon(),zIndexOffset:1000}).addTo(map);
-  map.setView([ll.lat,ll.lng],17,{animate:true,duration:.8});
+
+  // Rotate marker icon to show heading direction
+  const heading = pos.coords.heading;
+  const headingIcon = L.divIcon({className:'',iconSize:[22,22],iconAnchor:[11,11],
+    html:`<div style="width:22px;height:22px;border-radius:50%;background:#1a73e8;border:3px solid #fff;box-shadow:0 0 0 3px rgba(26,115,232,.3),0 2px 8px rgba(0,0,0,.3);position:relative">
+      ${heading!=null&&!isNaN(heading)?`<div style="position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:8px solid #1a73e8"></div>`:''}
+    </div>`});
+  posMk=L.marker([ll.lat,ll.lng],{icon:headingIcon,zIndexOffset:1000}).addTo(map);
+
+  // Only re-centre map if moved more than 10m
+  const moved = lastPos ? haversine(lastPos,ll) : 999;
+  if(moved > 10){
+    // Google Maps style — keep dot in lower third, rotate map to heading
+    if(heading!=null&&!isNaN(heading)&&moved>5){
+      // Calculate offset point ahead of user so they see more of the road ahead
+      const offsetDist = 0.003; // degrees ahead
+      const rad = heading * Math.PI/180;
+      const aheadLat = ll.lat + offsetDist * Math.cos(rad);
+      const aheadLng = ll.lng + offsetDist * Math.sin(rad);
+      // Pan to midpoint between user and ahead point (puts user in lower portion)
+      map.setView([
+        ll.lat*0.7 + aheadLat*0.3,
+        ll.lng*0.7 + aheadLng*0.3
+      ], 17, {animate:true, duration:.8});
+      // Rotate map to face direction of travel
+      if(map.getBearing) map.setBearing(heading);
+    } else {
+      map.setView([ll.lat,ll.lng],17,{animate:true,duration:.8});
+    }
+  }
 
   fetchSpeedLimit(ll, spd);
 
@@ -1243,9 +1274,11 @@ async function onPos(pos){
   // AND only if we weren't already close to destination when Drive was tapped
   const distToEnd = haversine(ll,{lat:endLL.lat,lng:endLL.lng});
   const startDistToEnd = driveStartLL ? haversine(driveStartLL,{lat:endLL.lat,lng:endLL.lng}) : Infinity;
-  if(distanceDriven>=MIN_DRIVE_BEFORE_ARRIVE &&
-     startDistToEnd > ARRIVE_M*3 && // wasn't already near destination when started
+  if(!arrivedFlag &&
+     distanceDriven>=MIN_DRIVE_BEFORE_ARRIVE &&
+     startDistToEnd > ARRIVE_M*3 &&
      distToEnd<ARRIVE_M){
+    arrivedFlag=true;
     speak('You have arrived at your destination');
     stopDrive();
   }
