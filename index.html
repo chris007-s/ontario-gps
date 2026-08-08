@@ -58,6 +58,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 .chip.red-chip{background:#dc2626;color:#fff}
 .chip.on{background:#e8f0fe;color:#1a73e8}
 .chip.driving{background:#dc2626;color:#fff}
+.chip.disabled{opacity:.35;pointer-events:none;cursor:default}
 .nobadge{background:#b91c1c;color:#fff;border-radius:20px;padding:8px 10px;font-size:10px;font-weight:700;white-space:nowrap;flex-shrink:0;display:flex;align-items:center}
 
 /* Route pill */
@@ -588,6 +589,7 @@ function placeStart(ll, label){
   inp.style.color = label ? '#1a73e8' : '#202124';
   inp.readOnly = true;
   document.getElementById('clr-from').style.display = 'block';
+  updateWorkflowState();
 }
 function placeEnd(ll){
   if(endMk) map.removeLayer(endMk);
@@ -596,6 +598,7 @@ function placeEnd(ll){
   endMk.on('dragend', async e=>{ endLL=e.target.getLatLng(); if(startLL) await runRoute(); });
   document.getElementById('inp-to').value = `${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
   document.getElementById('clr-to').style.display = 'block';
+  updateWorkflowState();
 }
 
 // ── GEOCODE + AUTOCOMPLETE ────────────────────────────────────────────────────
@@ -919,6 +922,7 @@ function drawRoute(result){
 
   if(voiceOn) speakStep(result.steps[0]);
   fetchQuota(); // update remaining count after each route
+  updateWorkflowState();
 }
 
 function renderSteps(){
@@ -989,6 +993,33 @@ async function runRoute(){
 }
 
 // ── CLEAR ─────────────────────────────────────────────────────────────────────
+
+// ── WORKFLOW STATE MANAGER ────────────────────────────────────────────────────
+function updateWorkflowState(){
+  const hasStart = !!startLL;
+  const hasEnd   = !!endLL;
+  const hasRoute = !!route;
+
+  // Route — needs start + end
+  const routeBtn = document.getElementById('chip-route');
+  if(routeBtn) routeBtn.classList.toggle('disabled', !hasStart||!hasEnd);
+
+  // Drive, Directions, Routes — need a route
+  ['chip-drive','p-drive','p-directions','p-routes'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el&&!el.classList.contains('driving')) el.classList.toggle('disabled',!hasRoute);
+  });
+
+  // Guide user via pill subtitle when search is visible
+  const sub = document.getElementById('pill-sub');
+  const pillShown = document.getElementById('pill')?.classList.contains('show');
+  if(!pillShown){
+    // Update inp-to placeholder to guide
+    const toInp = document.getElementById('inp-to');
+    if(toInp&&!hasEnd) toInp.placeholder = hasStart ? 'Where to? Type your destination' : 'Where to?';
+  }
+}
+
 function clearAll(){
   stopDrive();
   [startMk,endMk,routeLine,posMk].forEach(m=>{ if(m) map.removeLayer(m); });
@@ -1010,6 +1041,7 @@ function clearAll(){
   showSheet('hidden');
   window.speechSynthesis?.cancel();
   hideAC();
+  updateWorkflowState();
 }
 
 // ── DRIVE / TRACKING ──────────────────────────────────────────────────────────
@@ -1032,7 +1064,7 @@ function nearestDist(pos,coords){
 }
 
 function startDrive(){
-  if(!route){ alert('Plan a route first.'); return; }
+  if(!route){ updateWorkflowState(); return; }
   if(!navigator.geolocation){ alert('No geolocation support.'); return; }
   tracking=true;
   document.getElementById('chip-drive').textContent='⏹ Stop';
@@ -1982,6 +2014,7 @@ async function fetchQuota(){
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 fetchQuota(); // show remaining routes on startup
+updateWorkflowState(); // set initial button states
 // Show location permission banner on load
 setTimeout(()=>{
   if(navigator.geolocation){
