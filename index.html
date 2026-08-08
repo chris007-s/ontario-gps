@@ -1851,7 +1851,7 @@ window.loadNearby = async function(cat){
     hospital:'hospital emergency',
     parking:'parking lot garage',
     atm:'ATM bank machine',
-    supermarket:'loblaws metro sobeys grocery supermarket'
+    supermarket:'grocery store food basics no frills freshco',
   };
   const searchTerm = TT_SEARCH[cat]||cat;
   const url = `https://api.tomtom.com/search/2/poiSearch/${encodeURIComponent(searchTerm)}.json?lat=${pos.lat}&lon=${pos.lng}&radius=3000&limit=15&language=en-US&key=${ttKey}`;
