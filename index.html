@@ -1078,26 +1078,59 @@ async function runRoute(){
 }
 
 // ── CLEAR ─────────────────────────────────────────────────────────────────────
+function clearAll(){
+  stopDrive();
+  [startMk,endMk,routeLine,posMk].forEach(m=>{ if(m) map.removeLayer(m); });
+  startMk=endMk=routeLine=posMk=null;
+  startLL=endLL=null; clickState=0; route=null; lastPos=null;
+  inpFrom.readOnly=true; inpFrom.value=''; inpFrom.style.color='';
+  inpFrom.placeholder='📍 My location (tap to change)';
+  document.getElementById('inp-to').value='';
+  document.getElementById('clr-from').style.display='none';
+  document.getElementById('clr-to').style.display='none';
+  document.getElementById('sheet-steps').innerHTML='';
+  document.getElementById('s-km').textContent='-';
+  document.getElementById('s-time').textContent='-';
+  document.getElementById('s-turns').textContent='-';
+  document.getElementById('pill').classList.remove('show');
+  document.getElementById('pill-chips').classList.remove('show');
+  document.getElementById('searchbar').classList.remove('hidden');
+  document.getElementById('btn-open-fav-save').classList.remove('show');
+  showSheet('hidden');
+  window.speechSynthesis?.cancel();
+  hideAC();
+  updateWorkflowState();
+}
 
-// ── WAKE LOCK — prevent screen dimming while driving ─────────────────────────
+// ── WAKE LOCK ─────────────────────────────────────────────────────────────────
 let wakeLock = null;
-
 async function requestWakeLock(){
   if(!('wakeLock' in navigator)) return;
-  try{
-    wakeLock = await navigator.wakeLock.request('screen');
-    console.log('Wake lock active');
-  }catch(e){ console.warn('Wake lock failed:', e.message); }
+  try{ wakeLock = await navigator.wakeLock.request('screen'); dlog('Wake lock active'); }
+  catch(e){ console.warn('Wake lock failed:', e.message); }
 }
-
 function releaseWakeLock(){
-  if(wakeLock){ wakeLock.release(); wakeLock=null; console.log('Wake lock released'); }
+  if(wakeLock){ wakeLock.release(); wakeLock=null; }
 }
-
-// Re-acquire wake lock if page becomes visible again (e.g. user switches app and back)
 document.addEventListener('visibilitychange', ()=>{
-  if(document.visibilityState==='visible' && isTracking) requestWakeLock();
+  if(document.visibilityState==='visible' && tracking) requestWakeLock();
 });
+
+// ── DEBUG LOG ─────────────────────────────────────────────────────────────────
+const debugLog = [];
+function dlog(msg){
+  const ts = new Date().toISOString().substr(11,12);
+  debugLog.push(`[${ts}] ${msg}`);
+  console.log('GPS:', msg);
+}
+function downloadDebugLog(){
+  const blob = new Blob([debugLog.join('\n')], {type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=`gps-debug-${Date.now()}.txt`; a.click();
+  URL.revokeObjectURL(url);
+}
+document.getElementById('btn-debug-log').addEventListener('click', downloadDebugLog);
 function updateWorkflowState(){
   const hasStart = !!startLL;
   const hasEnd   = !!endLL;
@@ -2203,8 +2236,6 @@ async function fetchQuota(){
 
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
-document.getElementById('btn-debug-log').addEventListener('click', downloadDebugLog);
-
 fetchQuota(); // show remaining routes on startup
 updateWorkflowState(); // set initial button states
 // Show location permission banner on load
