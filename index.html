@@ -532,6 +532,7 @@ document.addEventListener('DOMContentLoaded', function() {
 const GH_KEY = (typeof GPS_CONFIG !== 'undefined') ? GPS_CONFIG.graphhopperKey : ''; // kept for reference
 const ORS_KEY = (typeof GPS_CONFIG !== 'undefined') ? GPS_CONFIG.orsKey : '';
 const OFFROUTE_M = 60, ARRIVE_M = 25, STEP_M = 30, REROUTE_COOL = 8000;
+const ARRIVAL_CONFIRMATIONS = 3;
 
 // State
 let startLL=null, endLL=null, startMk=null, endMk=null, routeLine=null, posMk=null;
@@ -542,6 +543,7 @@ const browserLang = navigator.language || navigator.userLanguage || 'en';
 let lang = browserLang.toLowerCase().startsWith('es') ? 'es-MX' : 'en-CA';
 let lastPos=null, lastReroute=0, lastSLFetch=0, lastSLLL=null;
 let distanceDriven=0, driveStartLL=null, arrivedFlag=false;
+let rerouting=false, arrivalConfirmations=0;
 const MIN_DRIVE_BEFORE_ARRIVE=200; // must travel 200m before arrival can trigger
 let favs=[];
 let sheetState='hidden';
@@ -1207,7 +1209,10 @@ function startDrive(){
   tracking=true;
   distanceDriven=0;
   driveStartLL=null;
+  lastPos=null;
   arrivedFlag=false;
+  arrivalConfirmations=0;
+  rerouting=false;
   document.getElementById('btn-debug-log').style.display='flex';
   document.getElementById('chip-drive').textContent='⏹ Stop';
   document.getElementById('chip-drive').classList.remove('green');
@@ -1276,18 +1281,31 @@ async function onPos(pos){
 
   if(dist>OFFROUTE_M){
     banner.style.display='block';
+    banner.textContent='⚠ Off route — recalculating…';
     dlog(`OFF ROUTE: ${dist.toFixed(0)}m from route line`);
     const now=Date.now();
-    if(now-lastReroute>REROUTE_COOL){
+    if(!rerouting && now-lastReroute>REROUTE_COOL){
+      rerouting=true;
       lastReroute=now;
       speak('Recalculating route');
       try{
         const r=await getRoute(ll,endLL);
         placeStart(L.latLng(ll.lat,ll.lng), '📍 My location');
         drawRoute(r);
-        startDrive();
+
+        // Keep the existing GPS watcher alive. Do NOT call startDrive(),
+        // because that would create a second watchPosition() listener.
+        // Preserve accumulated drive distance and original destination.
+        lastPos=ll;
+        arrivalConfirmations=0;
         banner.style.display='none';
-      }catch(e){ banner.textContent='⚠ Cannot recalculate: '+e.message; }
+        dlog('Reroute complete — existing GPS watcher preserved');
+      }catch(e){
+        banner.textContent='⚠ Cannot recalculate: '+e.message;
+        dlog('Reroute failed: '+e.message);
+      }finally{
+        rerouting=false;
+      }
     }
     return;
   }
@@ -1308,14 +1326,22 @@ async function onPos(pos){
   const startDistToEnd = driveStartLL ? haversine(driveStartLL,{lat:endLL.lat,lng:endLL.lng}) : Infinity;
   if(!arrivedFlag &&
      distanceDriven>=MIN_DRIVE_BEFORE_ARRIVE &&
-     startDistToEnd > ARRIVE_M*3 &&
-     distToEnd<ARRIVE_M){
-    dlog(`ARRIVED: distDriven:${distanceDriven.toFixed(0)}m distToEnd:${distToEnd.toFixed(0)}m`);
-    arrivedFlag=true;
-    // Stop watch IMMEDIATELY before speaking to prevent re-entry
-    if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
-    speak('You have arrived at your destination');
-    setTimeout(()=>stopDrive(), 2000); // delay stop so voice finishes
+     startDistToEnd > ARRIVE_M*3){
+    if(distToEnd<=ARRIVE_M){
+      arrivalConfirmations++;
+      dlog(`Arrival check ${arrivalConfirmations}/${ARRIVAL_CONFIRMATIONS}: ${distToEnd.toFixed(0)}m`);
+
+      if(arrivalConfirmations>=ARRIVAL_CONFIRMATIONS){
+        dlog(`ARRIVED: distDriven:${distanceDriven.toFixed(0)}m distToEnd:${distToEnd.toFixed(0)}m`);
+        arrivedFlag=true;
+        // Stop watch IMMEDIATELY before speaking to prevent re-entry
+        if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
+        speak('You have arrived at your destination');
+        setTimeout(()=>stopDrive(), 2000); // delay stop so voice finishes
+      }
+    }else{
+      arrivalConfirmations=0;
+    }
   }
 }
 
