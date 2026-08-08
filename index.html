@@ -1727,8 +1727,22 @@ function updateMemberMarkers(members, myKey){
     if(memberMarkers[key]){
       memberMarkers[key].setLatLng([m.lat,m.lng]);
     } else {
-      memberMarkers[key]=L.marker([m.lat,m.lng],{icon,zIndexOffset:900})
-        .bindTooltip(m.name||key,{permanent:false}).addTo(map);
+      const marker = L.marker([m.lat,m.lng],{icon,zIndexOffset:900}).addTo(map);
+      // Add popup with directions button for other members
+      if(!isMe){
+        const popupHTML=`
+          <div style="text-align:center;min-width:140px">
+            <div style="font-weight:700;font-size:14px;margin-bottom:8px">${m.name||key}</div>
+            <button onclick="routeToMember(${m.lat},${m.lng},'${(m.name||key).replace(/'/g,"\\'")}')"
+              style="background:#1a73e8;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;width:100%">
+              🗺 Get Directions
+            </button>
+          </div>`;
+        marker.bindPopup(popupHTML, {maxWidth:180});
+      } else {
+        marker.bindTooltip('You',{permanent:false});
+      }
+      memberMarkers[key]=marker;
     }
   });
 }
@@ -1736,6 +1750,21 @@ function clearMemberMarkers(){
   Object.values(memberMarkers).forEach(m=>map.removeLayer(m));
   memberMarkers={};
 }
+
+// Route to a live share member's position
+window.routeToMember = async function(lat, lng, name){
+  map.closePopup();
+  document.getElementById('share-trip-modal').classList.remove('open');
+  const ll = L.latLng(lat, lng);
+  placeEnd(ll);
+  document.getElementById('inp-to').value = name + ' (live location)';
+  clickState = 2;
+  if(!startLL){
+    // Use current GPS position as start
+    if(lastPos) placeStart(L.latLng(lastPos.lat, lastPos.lng), '📍 My location');
+  }
+  if(startLL && endLL) await runRoute();
+};
 function updateMembersList(members){
   const colours=['🔵','🔴','🟢','🟡','🟠'];
   document.getElementById('members-list').innerHTML=Object.values(members).map((m,i)=>
