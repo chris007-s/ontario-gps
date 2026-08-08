@@ -779,9 +779,8 @@ async function getRoute(start, end){
   url.searchParams.set('key',GH_KEY);
   url.searchParams.append('point',`${start.lat},${start.lng}`);
   url.searchParams.append('point',`${end.lat},${end.lng}`);
-  url.searchParams.set('profile','car_avoid_motorway');
-  // car_avoid_motorway is a dedicated GH profile — no avoid param needed
-  // url.searchParams.set('avoid','MOTORWAY|TRUNK'); // redundant with this profile
+  url.searchParams.set('profile','car');
+  url.searchParams.set('avoid','MOTORWAY|TRUNK');
   url.searchParams.set('points_encoded','false');
   url.searchParams.set('instructions','true');
   url.searchParams.set('locale','en');
