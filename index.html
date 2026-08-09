@@ -2262,6 +2262,18 @@ setTimeout(()=>{
 
 }); // end DOMContentLoaded
 
+// ── AUTO CACHE CLEAR ON LOAD — always fresh code, keeps favourites ────────────
+async function clearAppCache(){
+  try{
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k=>caches.delete(k)));
+    console.log('Cache cleared — favourites preserved in localStorage');
+  }catch(e){ console.warn('Cache clear failed:',e.message); }
+}
+// Clear cache on every load so we always run fresh code
+// localStorage (favourites) is NOT touched — only service worker caches
+clearAppCache();
+
 // ── SERVICE WORKER ────────────────────────────────────────────────────────────
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{

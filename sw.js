@@ -2,8 +2,8 @@
 // Caches the app shell so it loads instantly offline
 // Map tiles are cached as you browse (up to 500 tiles)
 
-const APP_CACHE = 'ont-gps-app-v5';
-const TILE_CACHE = 'ont-gps-tiles-v5';
+const APP_CACHE = 'ont-gps-app-v6';
+const TILE_CACHE = 'ont-gps-tiles-v6';
 const MAX_TILES = 500;
 
 const APP_SHELL = [
