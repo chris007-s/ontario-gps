@@ -531,7 +531,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 const GH_KEY = (typeof GPS_CONFIG !== 'undefined') ? GPS_CONFIG.graphhopperKey : ''; // kept for reference
 const ORS_KEY = (typeof GPS_CONFIG !== 'undefined') ? GPS_CONFIG.orsKey : '';
-const OFFROUTE_M = 80, ARRIVE_M = 25, STEP_M = 30, REROUTE_COOL = 15000;
+const OFFROUTE_M = 60, ARRIVE_M = 25, STEP_M = 30, REROUTE_COOL = 20000;
+const ARRIVAL_CONFIRMATIONS = 3, OFFROUTE_CONFIRMATIONS = 2, REROUTE_SUPPRESS_MS = 10000;
 
 // State
 let startLL=null, endLL=null, startMk=null, endMk=null, routeLine=null, posMk=null;
@@ -542,6 +543,7 @@ const browserLang = navigator.language || navigator.userLanguage || 'en';
 let lang = browserLang.toLowerCase().startsWith('es') ? 'es-MX' : 'en-CA';
 let lastPos=null, lastReroute=0, lastSLFetch=0, lastSLLL=null;
 let distanceDriven=0, driveStartLL=null, arrivedFlag=false;
+let rerouting=false, arrivalConfirmations=0, offRouteConfirmations=0, suppressOffRouteUntil=0;
 const MIN_DRIVE_BEFORE_ARRIVE=200; // must travel 200m before arrival can trigger
 let favs=[];
 let sheetState='hidden';
@@ -959,8 +961,9 @@ function speakStep(s){
   speak(t);
 }
 // ── DRAW ROUTE ────────────────────────────────────────────────────────────────
-function drawRoute(result){
+function drawRoute(result, opts={}){
   route=result; stepIdx=0;
+  navRouteIndex=0; navSnappedLL=null;
   if(routeLine) map.removeLayer(routeLine);
   routeLine=L.polyline(result.coords,{
     color:result.fallback?'#f59e0b':'#1a73e8', weight:6, opacity:.9,
@@ -997,7 +1000,7 @@ function drawRoute(result){
   document.getElementById('pill-chips').classList.add('show');
   document.getElementById('searchbar').classList.add('hidden');
 
-  if(voiceOn) speakStep(result.steps[0]);
+  if(voiceOn && !opts.silent && result.steps[0]) speakStep(result.steps[0]);
   fetchQuota(); // update remaining count after each route
   updateWorkflowState();
 }
@@ -1046,7 +1049,7 @@ function updateNav(idx){
   if(el) el.scrollIntoView({block:'nearest',behavior:'smooth'});
 }
 
-function jumpStep(i){ updateNav(i); if(voiceOn) speakStep(route.steps[i]); }
+function jumpStep(i){ updateNav(i); if(voiceOn && route.steps[i]?.sign!==4) speakStep(route.steps[i]); }
 
 // ── SHEET ─────────────────────────────────────────────────────────────────────
 function showSheet(state){
@@ -1199,15 +1202,89 @@ function nearestDist(pos,coords){
   return best;
 }
 
+// ── ROUTE-FOLLOW NAVIGATION ────────────────────────────────────────────────
+let navRouteIndex=0;
+let navSnappedLL=null;
+let lastNavHeading=null;
+let navInitialFix=true;
+const NAV_SNAP_MAX_M=80;
+const NAV_LOOK_AHEAD=120;
+
+function closestPointOnRouteSegment(p,a,b){
+  const lat0=p.lat*Math.PI/180;
+  const kx=111320*Math.cos(lat0), ky=110540;
+  const ax=(a[1]-p.lng)*kx, ay=(a[0]-p.lat)*ky;
+  const bx=(b[1]-p.lng)*kx, by=(b[0]-p.lat)*ky;
+  const dx=bx-ax, dy=by-ay, den=dx*dx+dy*dy;
+  let t=den?(-(ax*dx+ay*dy))/den:0;
+  t=Math.max(0,Math.min(1,t));
+  return {lat:a[0]+(b[0]-a[0])*t,lng:a[1]+(b[1]-a[1])*t,t};
+}
+
+function snapToRoute(pos){
+  if(!route||!route.coords||route.coords.length<2) return null;
+  const pts=route.coords;
+  const lo=Math.max(0,Math.floor(navRouteIndex)-20);
+  const hi=Math.min(pts.length-2,Math.floor(navRouteIndex)+NAV_LOOK_AHEAD);
+  let best=null;
+  for(let i=lo;i<=hi;i++){
+    const q=closestPointOnRouteSegment(pos,pts[i],pts[i+1]);
+    const d=haversine(pos,q);
+    if(!best||d<best.distance) best={point:q,distance:d,index:i,progress:i+q.t};
+  }
+  if(!best) return null;
+  if(best.distance<=NAV_SNAP_MAX_M){
+    // GPS noise must not move the navigation position backwards.
+    if(best.progress>=navRouteIndex-2) navRouteIndex=best.progress;
+    navSnappedLL=best.point;
+    return best;
+  }
+  return {point:pos,distance:best.distance,index:best.index,progress:best.progress,unsnapped:true};
+}
+
+function updateNavigationFollow(rawLL, heading){
+  const hit=snapToRoute(rawLL);
+  const display=hit?hit.point:rawLL;
+  if(hit&&!hit.unsnapped) navRouteIndex=hit.progress;
+
+  if(posMk) posMk.setLatLng([display.lat,display.lng]);
+  else posMk=L.marker([display.lat,display.lng],{icon:myIcon(),zIndexOffset:1000}).addTo(map);
+
+  // Follow mode: keep the navigation position in the lower-middle of the map.
+  if(tracking && map){
+    const z=Math.max(map.getZoom(),17);
+    map.setView([display.lat,display.lng],z,{animate:true,duration:.35});
+  }
+
+  // Keep a useful heading value for future bearing-aware UI.
+  if(typeof heading==='number'&&isFinite(heading)&&heading>=0) lastNavHeading=heading;
+  return hit;
+}
+
 function startDrive(){
   if(!route){ updateWorkflowState(); return; }
   if(!navigator.geolocation){ alert('No geolocation support.'); return; }
+
+  // Only one GPS watcher is allowed. Rerouting must NOT call startDrive().
+  if(tracking && watchId!==null){
+    dlog('Drive already active — keeping existing GPS watcher');
+    return;
+  }
+
   requestWakeLock();
   dlog('Drive started — route: '+route.src+' '+((route.distance/1000).toFixed(1))+'km, steps:'+route.steps.length);
   tracking=true;
   distanceDriven=0;
   driveStartLL=null;
+  lastPos=null;
   arrivedFlag=false;
+  arrivalConfirmations=0;
+  navRouteIndex=0;
+  navSnappedLL=null;
+  navInitialFix=true;
+  offRouteConfirmations=0;
+  suppressOffRouteUntil=0;
+  rerouting=false;
   document.getElementById('btn-debug-log').style.display='flex';
   document.getElementById('chip-drive').textContent='⏹ Stop';
   document.getElementById('chip-drive').classList.remove('green');
@@ -1217,12 +1294,10 @@ function startDrive(){
   document.getElementById('nav').style.display='flex';
   document.getElementById('nav').style.flexDirection='column';
   showSheet('hidden');
-  // Zoom in immediately to street level before first GPS update
   if(startLL) map.setView([startLL.lat, startLL.lng], 17, {animate:true});
   watchId=navigator.geolocation.watchPosition(onPos, onGPSErr,
     {enableHighAccuracy:true, maximumAge:2000, timeout:10000});
 }
-
 function stopDrive(){
   releaseWakeLock();
   document.getElementById('btn-debug-log').style.display='none';
@@ -1236,6 +1311,8 @@ function stopDrive(){
   document.getElementById('p-drive').classList.remove('driving');
   document.getElementById('nav').style.display='none';
   document.getElementById('offroute').style.display='none';
+  offRouteConfirmations=0;
+  rerouting=false;
   document.getElementById('spd-sign').classList.remove('show');
   if(posMk){ map.removeLayer(posMk); posMk=null; }
   lastSLFetch=0; lastSLLL=null;
@@ -1247,86 +1324,131 @@ async function onPos(pos){
   const spd=pos.coords.speed!=null?Math.round(pos.coords.speed*3.6):null;
   document.getElementById('nav-spd').textContent=spd!=null?spd:'-';
 
-  // Track distance driven since Drive was tapped
   if(!driveStartLL) driveStartLL=ll;
-  const prevPos = lastPos;
+  const prevPos=lastPos;
   if(prevPos) distanceDriven+=haversine(prevPos,ll);
   lastPos=ll;
 
-  // Log position every 5 seconds worth of movement
-  if(Math.round(distanceDriven) % 50 < 5){
-    dlog(`Pos: ${ll.lat.toFixed(5)},${ll.lng.toFixed(5)} spd:${spd??'-'}km/h dist:${distanceDriven.toFixed(0)}m`);
+  if(Math.round(distanceDriven)%50<5){
+    dlog(`Pos: ${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)} spd:${spd??'-'}km/h dist:${distanceDriven.toFixed(0)}m`);
   }
 
-  if(posMk) map.removeLayer(posMk);
-  posMk=L.marker([ll.lat,ll.lng],{icon:myIcon(),zIndexOffset:1000}).addTo(map);
+  // Follow the calculated route instead of displaying an independent raw-GPS dot.
+  // The raw GPS position remains the source for off-route and arrival calculations.
+  const navHit=updateNavigationFollow(ll,pos.coords.heading);
 
-  // Always follow position while driving — smooth pan at street level
-  const moved = prevPos ? haversine(prevPos,ll) : 999;
-  if(moved > 5){
-    map.setView([ll.lat,ll.lng], 17, {animate:true, duration:0.5});
-    dlog(`Map zoom/follow: moved ${moved.toFixed(0)}m → setView zoom17`);
+  // If the first GPS fix is not near the calculated route, immediately rebuild the
+  // route from the real starting position. This prevents a stale/typed start point
+  // from leaving the driver beside the blue route when Drive begins.
+  if(navInitialFix){
+    navInitialFix=false;
+    if(navHit&&navHit.unsnapped&&endLL&&!rerouting){
+      rerouting=true;
+      lastReroute=Date.now();
+      dlog(`Initial GPS is ${navHit.distance.toFixed(0)}m from route — recalculating from current position`);
+      try{
+        const r=await getRoute(ll,endLL);
+        placeStart(L.latLng(ll.lat,ll.lng),'📍 My location');
+        drawRoute(r,{silent:true});
+        navRouteIndex=0;
+        navSnappedLL=ll;
+        updateNavigationFollow(ll,pos.coords.heading);
+        lastPos=ll;
+        arrivalConfirmations=0;
+        offRouteConfirmations=0;
+        suppressOffRouteUntil=Date.now()+REROUTE_SUPPRESS_MS;
+      }catch(e){
+        dlog('Initial-position reroute failed: '+e.message);
+      }finally{
+        rerouting=false;
+      }
+    }
   }
 
-  fetchSpeedLimit(ll, spd);
+  fetchSpeedLimit(ll,spd);
 
   if(!route||!endLL||arrivedFlag) return;
-
-  // Don't check off-route until actually moving — prevents false triggers when stationary
-  if(distanceDriven < 100) return;
 
   const dist=nearestDist(ll,route.coords);
   const banner=document.getElementById('offroute');
 
-  // Only flag off-route if GPS accuracy is good enough
-  const accuracy = pos.coords.accuracy || 999;
-  if(accuracy > 50) return; // GPS too inaccurate to trust off-route
+  // Require two consecutive GPS fixes off the route before recalculating.
+  // This filters normal phone GPS jumps.
+  if(dist>OFFROUTE_M && Date.now()>=suppressOffRouteUntil){
+    offRouteConfirmations++;
+    dlog(`OFF ROUTE ${offRouteConfirmations}/${OFFROUTE_CONFIRMATIONS}: ${dist.toFixed(0)}m`);
 
-  if(dist>OFFROUTE_M){
+    if(offRouteConfirmations < OFFROUTE_CONFIRMATIONS){
+      return;
+    }
+
     banner.style.display='block';
-    dlog(`OFF ROUTE: ${dist.toFixed(0)}m from route line`);
+    banner.textContent='⚠ Off route — recalculating…';
     const now=Date.now();
-    if(now-lastReroute>REROUTE_COOL){
+    if(!rerouting && now-lastReroute>REROUTE_COOL){
+      rerouting=true;
       lastReroute=now;
       speak('Recalculating route');
       try{
         const r=await getRoute(ll,endLL);
-        placeStart(L.latLng(ll.lat,ll.lng), '📍 My location');
-        drawRoute(r);
-        startDrive();
+        placeStart(L.latLng(ll.lat,ll.lng),'📍 My location');
+        drawRoute(r,{silent:true});
+
+        // IMPORTANT: keep the existing GPS watcher. Never call startDrive().
+        lastPos=ll;
+        arrivalConfirmations=0;
+        offRouteConfirmations=0;
+        suppressOffRouteUntil=Date.now()+REROUTE_SUPPRESS_MS;
         banner.style.display='none';
-      }catch(e){ banner.textContent='⚠ Cannot recalculate: '+e.message; }
+        dlog('Reroute complete — existing GPS watcher preserved');
+      }catch(e){
+        banner.textContent='⚠ Cannot recalculate: '+e.message;
+        dlog('Reroute failed: '+e.message);
+        suppressOffRouteUntil=Date.now()+REROUTE_SUPPRESS_MS;
+      }finally{
+        rerouting=false;
+      }
     }
     return;
   }
+
+  offRouteConfirmations=0;
   banner.style.display='none';
 
+  // Advance normal turn instructions, but NEVER announce the routing
+  // engine's final "arrive" step here. Arrival is confirmed separately.
   if(stepIdx<route.steps.length-1){
     const ns=route.steps[stepIdx+1];
     const npt=route.coords[Math.min(ns.ptIdx,route.coords.length-1)];
     if(npt&&haversine(ll,{lat:npt[0],lng:npt[1]})<STEP_M){
-      updateNav(stepIdx+1);
-      speakStep(route.steps[stepIdx+1]);
+      if(ns.sign!==4){
+        updateNav(stepIdx+1);
+        speakStep(ns);
+      }
     }
   }
 
-  // Only check arrival after driving at least MIN_DRIVE_BEFORE_ARRIVE metres
-  // AND only if we weren't already close to destination when Drive was tapped
-  const distToEnd = haversine(ll,{lat:endLL.lat,lng:endLL.lng});
-  const startDistToEnd = driveStartLL ? haversine(driveStartLL,{lat:endLL.lat,lng:endLL.lng}) : Infinity;
-  if(!arrivedFlag &&
-     distanceDriven>=MIN_DRIVE_BEFORE_ARRIVE &&
-     startDistToEnd > ARRIVE_M*3 &&
-     distToEnd<ARRIVE_M){
-    dlog(`ARRIVED: distDriven:${distanceDriven.toFixed(0)}m distToEnd:${distToEnd.toFixed(0)}m`);
-    arrivedFlag=true;
-    // Stop watch IMMEDIATELY before speaking to prevent re-entry
-    if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
-    speak('You have arrived at your destination');
-    setTimeout(()=>stopDrive(), 2000); // delay stop so voice finishes
+  // Confirm arrival independently: minimum driven distance + destination
+  // distance + three consecutive GPS fixes inside ARRIVE_M.
+  const distToEnd=haversine(ll,{lat:endLL.lat,lng:endLL.lng});
+  const startDistToEnd=driveStartLL?haversine(driveStartLL,{lat:endLL.lat,lng:endLL.lng}):Infinity;
+  if(!arrivedFlag && distanceDriven>=MIN_DRIVE_BEFORE_ARRIVE && startDistToEnd>ARRIVE_M*3){
+    if(distToEnd<=ARRIVE_M){
+      arrivalConfirmations++;
+      dlog(`Arrival check ${arrivalConfirmations}/${ARRIVAL_CONFIRMATIONS}: ${distToEnd.toFixed(0)}m`);
+      if(arrivalConfirmations>=ARRIVAL_CONFIRMATIONS){
+        arrivedFlag=true;
+        const finalStepIdx=route.steps.findIndex(s=>s.sign===4);
+        if(finalStepIdx>=0) updateNav(finalStepIdx);
+        if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
+        speak('You have arrived at your destination');
+        setTimeout(()=>stopDrive(),2000);
+      }
+    }else{
+      arrivalConfirmations=0;
+    }
   }
 }
-
 function onGPSErr(e){ console.warn('GPS err:',e.message); }
 
 // ── SPEED LIMIT ───────────────────────────────────────────────────────────────
@@ -2261,18 +2383,6 @@ setTimeout(()=>{
 }, 600);
 
 }); // end DOMContentLoaded
-
-// ── AUTO CACHE CLEAR ON LOAD — always fresh code, keeps favourites ────────────
-async function clearAppCache(){
-  try{
-    const keys = await caches.keys();
-    await Promise.all(keys.map(k=>caches.delete(k)));
-    console.log('Cache cleared — favourites preserved in localStorage');
-  }catch(e){ console.warn('Cache clear failed:',e.message); }
-}
-// Clear cache on every load so we always run fresh code
-// localStorage (favourites) is NOT touched — only service worker caches
-clearAppCache();
 
 // ── SERVICE WORKER ────────────────────────────────────────────────────────────
 if('serviceWorker' in navigator){
