@@ -22,16 +22,14 @@
 html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#e8edf0}
 
 #map{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0}
-/* Map rotation — the tile layer rotates, UI overlays counter-rotate */
-.leaflet-tile-pane,
-.leaflet-overlay-pane,
-.leaflet-shadow-pane,
-.leaflet-marker-pane,
-.leaflet-tooltip-pane {
+/* Map rotation — ONLY rotate the tile pane, never marker/overlay panes.
+   Leaflet uses CSS transform to position markers; overriding transform-origin
+   on those panes breaks hit-testing and makes the whole map unresponsive. */
+.leaflet-tile-pane {
   transform-origin: 50% 50%;
   transition: transform 0.4s ease-out;
 }
-/* Position marker must NOT rotate with the map — always stays upright */
+/* Position marker arrow — counter-rotated by applyMapRotation() */
 .pos-marker-wrap {
   transform-origin: 50% 50%;
   transition: transform 0.4s ease-out;
@@ -1761,16 +1759,17 @@ function smoothBearing(current, target, alpha=0.25){
 
 function applyMapRotation(bearing){
   mapBearing = bearing;
-  // Rotate the Leaflet tile/overlay panes
   const rot = `rotate(${-bearing}deg)`;
-  const panes = ['leaflet-tile-pane','leaflet-overlay-pane',
-                 'leaflet-shadow-pane','leaflet-marker-pane',
-                 'leaflet-tooltip-pane'];
-  panes.forEach(cls=>{
-    const el = map.getContainer().querySelector('.'+cls);
-    if(el) el.style.transform = rot;
-  });
-  // Counter-rotate the position marker so it always points up
+  // Only rotate the tile pane — rotating marker/overlay panes breaks Leaflet
+  const tilePane = map.getContainer().querySelector('.leaflet-tile-pane');
+  if(tilePane) tilePane.style.transform = rot;
+  // Also rotate the route polyline pane so the blue line stays aligned with tiles
+  const overlayPane = map.getContainer().querySelector('.leaflet-overlay-pane');
+  if(overlayPane){
+    overlayPane.style.transformOrigin = '50% 50%';
+    overlayPane.style.transform = rot;
+  }
+  // Counter-rotate the position marker arrow so it always points up on screen
   if(posMk && posMk.getElement){
     const el = posMk.getElement();
     if(el) el.style.transform = `rotate(${bearing}deg)`;
