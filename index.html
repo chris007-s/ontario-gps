@@ -885,7 +885,7 @@ document.getElementById('inp-to').addEventListener('focus', e=>{
 document.getElementById('inp-to').addEventListener('blur', ()=>{
   setTimeout(hideAC, 200);
 });
-document.getElementById('inp-to').addEventListener('keydown', e=>{\
+document.getElementById('inp-to').addEventListener('keydown', e=>{
   if(e.key==='Enter'){ hideAC(); document.getElementById('chip-route').click(); }
 });
 
