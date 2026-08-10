@@ -737,7 +737,7 @@ async function geocode(q){
       // Try bounded first (only near user), then biased-unbounded
       for(const bounded of ['1','0']){
         const url=`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=ca&viewbox=${viewbox}&bounded=${bounded}`;
-        const d=await(await fetch(url,{headers,signal:AbortSignal.timeout(8000)})).json();
+        const d=await(await fetch(url,{headers,signal:AbortSignal.timeout(15000)})).json();
         if(d&&d.length){
           dlog(`Geocode: "${query}" bounded=${bounded} → ${d[0].display_name}`);
           return {lat:parseFloat(d[0].lat), lng:parseFloat(d[0].lon)};
@@ -797,7 +797,7 @@ async function fetchSuggestions(q){
 
   for(const url of searches){
     try{
-      const d = await (await fetch(url,{headers,signal:AbortSignal.timeout(6000)})).json();
+      const d = await (await fetch(url,{headers,signal:AbortSignal.timeout(12000)})).json();
       if(d && d.length){
         dlog(`AC: ${d.length} results (near ${refLat.toFixed(3)},${refLng.toFixed(3)})`);
         return d;
@@ -1161,7 +1161,7 @@ async function getRoute(start, end){
         method:'POST',
         headers:{'Authorization':orsKey,'Content-Type':'application/json','Accept':'application/json'},
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(15000)
+        signal: AbortSignal.timeout(25000)
       });
       const text = await r.text();
       if(!r.ok) throw new Error(`ORS HTTP ${r.status}`);
@@ -1183,7 +1183,7 @@ async function getRoute(start, end){
         try{
           const r2=await fetch(url,{method:'POST',
             headers:{'Authorization':orsKey,'Content-Type':'application/json','Accept':'application/json'},
-            body:JSON.stringify(body2), signal:AbortSignal.timeout(15000)});
+            body:JSON.stringify(body2), signal:AbortSignal.timeout(25000)});
           if(r2.ok){
             const d2=await r2.json();
             if(!d2.error){
@@ -1244,7 +1244,7 @@ async function getRoute(start, end){
         'Accept': 'application/json'
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(15000)
+      signal: AbortSignal.timeout(25000)
     });
     const text = await r.text();
     console.log('ORS HTTP:', r.status);
@@ -1275,7 +1275,7 @@ async function getRoute(start, end){
           method:'POST',
           headers:{'Authorization':orsKey,'Content-Type':'application/json','Accept':'application/json'},
           body: JSON.stringify(body2),
-          signal: AbortSignal.timeout(15000)
+          signal: AbortSignal.timeout(25000)
         });
         if(r2.ok){
           const d2 = await r2.json();
@@ -1356,7 +1356,7 @@ function orsTypeToSign(type){
 
 async function osrm(start,end){
   const url=`https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?steps=true&geometries=geojson&overview=full`;
-  const r=await fetch(url,{signal:AbortSignal.timeout(15000)});
+  const r=await fetch(url,{signal:AbortSignal.timeout(25000)});
   if(!r.ok) throw new Error('OSRM '+r.status);
   const d=await r.json();
   if(d.code!=='Ok') throw new Error('No route found');
@@ -2276,7 +2276,7 @@ async function ghRoute(points, opts={}){
   url.searchParams.set('details', 'road_class,lanes');
   if(opts.algorithm) url.searchParams.set('algorithm', opts.algorithm);
   if(opts.maxPaths)  url.searchParams.set('alternative_route.max_paths', opts.maxPaths);
-  const r = await fetch(url.toString(), {signal:AbortSignal.timeout(15000)});
+  const r = await fetch(url.toString(), {signal:AbortSignal.timeout(25000)});
   if(!r.ok) throw new Error('GH '+r.status);
   const d = await r.json();
   if(d.message) throw new Error(d.message);
@@ -2299,7 +2299,7 @@ async function fetchStyleRoutes(start, end){
         headers:{'Authorization':orsKey,'Content-Type':'application/json','Accept':'application/json'},
         body:JSON.stringify({coordinates:coords,instructions:true,language:'en',
           options:{avoid_features:['highways','tollways','ferries']}}),
-        signal:AbortSignal.timeout(15000)
+        signal:AbortSignal.timeout(25000)
       });
       if(!r.ok) throw new Error('ORS '+r.status);
       const d=await r.json();
@@ -2461,7 +2461,7 @@ async function placeVia(ll){
       const r=await fetch('https://api.openrouteservice.org/v2/directions/driving-car',{
         method:'POST',
         headers:{'Authorization':orsKey,'Content-Type':'application/json','Accept':'application/json'},
-        body:JSON.stringify(body),signal:AbortSignal.timeout(15000)
+        body:JSON.stringify(body),signal:AbortSignal.timeout(25000)
       });
       if(!r.ok) throw new Error('ORS '+r.status);
       const d=await r.json();
@@ -2917,7 +2917,7 @@ window.loadNearby = async function(cat){
   const url = `https://api.tomtom.com/search/2/poiSearch/${encodeURIComponent(searchTerm)}.json?lat=${pos.lat}&lon=${pos.lng}&radius=3000&limit=15&language=en-US&key=${ttKey}`;
 
   try{
-    const r = await fetch(url, {signal:AbortSignal.timeout(8000)});
+    const r = await fetch(url, {signal:AbortSignal.timeout(15000)});
     if(!r.ok) throw new Error('TomTom error: '+r.status);
     const d = await r.json();
     renderNearby(d.results||[], pos, cat);
@@ -3027,7 +3027,7 @@ async function fetchQuota(){
         method:'POST',
         headers:{'Authorization':orsKey,'Content-Type':'application/json'},
         body:JSON.stringify({coordinates:[[-79.38,43.65],[-79.40,43.70]],instructions:false,options:{avoid_features:['highways','tollways']}}),
-        signal:AbortSignal.timeout(8000)
+        signal:AbortSignal.timeout(15000)
       });
       ghStatus=r.ok;
       console.log('ORS key test HTTP:',r.status);
