@@ -1481,7 +1481,7 @@ function drawRoute(result, opts={}){
   document.getElementById('searchbar').classList.add('hidden');
 
   if(voiceOn && !opts.silent && result.steps[0]) speakStep(result.steps[0]);
-  fetchQuota(); // update remaining count after each route
+  fetchQuota().catch(()=>{}); // update key status after route (non-blocking)
   updateWorkflowState();
 }
 
@@ -3021,16 +3021,15 @@ async function fetchQuota(){
   }
   try{
     let ghStatus=false, ttStatus=false;
+    // Short 6s timeout — this is background status only, never block UI
     if(ghOK){
-      // Test ORS connectivity with a tiny route
       const r=await fetch('https://api.openrouteservice.org/v2/directions/driving-car',{
         method:'POST',
         headers:{'Authorization':orsKey,'Content-Type':'application/json'},
         body:JSON.stringify({coordinates:[[-79.38,43.65],[-79.40,43.70]],instructions:false,options:{avoid_features:['highways','tollways']}}),
-        signal:AbortSignal.timeout(15000)
+        signal:AbortSignal.timeout(6000)
       });
       ghStatus=r.ok;
-      console.log('ORS key test HTTP:',r.status);
     }
     if(ttOK){
       const r=await fetch(`https://api.tomtom.com/search/2/categorySearch/coffee.json?lat=43.7&lon=-79.4&limit=1&key=${ttKey}`,{signal:AbortSignal.timeout(5000)});
@@ -3047,7 +3046,8 @@ async function fetchQuota(){
 
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
-fetchQuota(); // show remaining routes on startup
+// Run quota check after 3s delay — never block app startup
+setTimeout(()=>{ fetchQuota().catch(()=>{}); }, 3000);
 updateWorkflowState(); // set initial button states
 // Show location permission banner on load
 setTimeout(()=>{
