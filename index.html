@@ -803,6 +803,7 @@ async function fetchSuggestions(q){
       }
     }catch(e){ dlog(`AC error: ${e.message}`); }
   }
+  dlog(`AC: no results for "${q}" after all strategies`);
   return [];
 }
 
@@ -884,9 +885,33 @@ document.getElementById('inp-to').addEventListener('focus', e=>{
 document.getElementById('inp-to').addEventListener('blur', ()=>{
   setTimeout(hideAC, 200);
 });
-document.getElementById('inp-to').addEventListener('keydown', e=>{
+document.getElementById('inp-to').addEventListener('keydown', e=>{\
   if(e.key==='Enter'){ hideAC(); document.getElementById('chip-route').click(); }
 });
+
+// ── POLLING FALLBACK for Playwright/emulator ──────────────────────────────────
+// Playwright mobile emulation sometimes doesn't fire input/keyup events.
+// Poll the field every 300ms and trigger autocomplete if value changed.
+(function startInputPoller(){
+  const inp = document.getElementById('inp-to');
+  let lastVal = '';
+  setInterval(()=>{
+    const v = inp.value.trim();
+    if(v !== lastVal){
+      lastVal = v;
+      if(v.length >= 3){
+        clearTimeout(acTimer);
+        acTimer = setTimeout(async()=>{
+          const results = await fetchSuggestions(v);
+          showAC(results);
+        }, 400);
+      } else if(v.length === 0){
+        hideAC();
+      }
+    }
+  }, 300);
+})();
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ── FROM FIELD ────────────────────────────────────────────────────────────────
 const inpFrom = document.getElementById('inp-from');
