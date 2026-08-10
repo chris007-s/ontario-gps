@@ -728,7 +728,7 @@ async function geocode(q){
   // Location bias — search near current GPS position first
   const refLat = lastPos ? lastPos.lat : (startLL ? startLL.lat : 43.70);
   const refLng = lastPos ? lastPos.lng : (startLL ? startLL.lng : -79.45);
-  const radius = 0.35;
+  const radius = 0.6;
   const viewbox = `${refLng-radius},${refLat+radius},${refLng+radius},${refLat-radius}`;
 
   const headers = {'Accept-Language':'en','User-Agent':'OntarioGPS/4.0'};
@@ -772,7 +772,7 @@ async function fetchSuggestions(q){
   let viewbox, bounded;
   const refLat = lastPos ? lastPos.lat : (startLL ? startLL.lat : 43.70);
   const refLng = lastPos ? lastPos.lng : (startLL ? startLL.lng : -79.45);
-  const radius = 0.35; // ~35km box around current position
+  const radius = 0.6; // ~60km box around current position
   viewbox = `${refLng-radius},${refLat+radius},${refLng+radius},${refLat-radius}`;
   bounded = '1'; // ONLY return results inside this box
 
@@ -780,19 +780,18 @@ async function fetchSuggestions(q){
 
   // Strategy 1: bounded search near current position (most accurate)
   // Strategy 2: same query, unbounded but biased (catches nearby results outside box)
-  // Strategy 3: without street number, bounded
   const baseParams = `&format=json&limit=6&addressdetails=1&countrycodes=ca`;
   const biasParams = `${baseParams}&viewbox=${viewbox}`;
 
   const searches = [
-    // Near user, bounded — best results
-    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(noPostal+', Ontario, Canada')}${biasParams}&bounded=${bounded}`,
-    // Near user, bounded — try Toronto specifically
-    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(noPostal+', Toronto')}${biasParams}&bounded=${bounded}`,
-    // Near user, not bounded — catches results just outside box
+    // Biased toward user but NOT bounded — catches Vaughan, Brampton, Mississauga etc.
     `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(noPostal+', Ontario, Canada')}${biasParams}&bounded=0`,
-    // Without street number, bounded
-    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(noPostal.replace(/^\d+\s+/,'')+', Ontario, Canada')}${biasParams}&bounded=${bounded}`,
+    // Try with just Ontario (no "Canada" suffix)
+    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(noPostal+', Ontario')}${biasParams}&bounded=0`,
+    // Without street number — finds the street when exact address isn't in OSM
+    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(noPostal.replace(/^\d+\s+/,'')+', Ontario, Canada')}${biasParams}&bounded=0`,
+    // Last resort — no viewbox at all, just Canada
+    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(noPostal+', Ontario, Canada')}${baseParams}`,
   ];
 
   for(const url of searches){
