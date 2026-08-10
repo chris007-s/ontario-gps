@@ -533,6 +533,36 @@ const GPS_CONFIG = {
 document.addEventListener('DOMContentLoaded', function() {
 // ── Everything inside DOMContentLoaded so map container is ready ──
 
+// ── MOUSE DRAG SCROLL — makes chip bars swipeable with mouse drag ─────────────
+// Needed in desktop emulators (Playwright) where touch-scroll doesn't work with
+// a mouse. Safe on real phones — touch events take priority, this is mouse-only.
+function enableDragScroll(el) {
+  let isDown = false, startX = 0, scrollLeft = 0;
+  el.addEventListener('mousedown', e => {
+    isDown = true;
+    el.style.cursor = 'grabbing';
+    startX = e.pageX - el.offsetLeft;
+    scrollLeft = el.scrollLeft;
+    e.preventDefault(); // stop text selection while dragging
+  });
+  el.addEventListener('mouseleave', () => { isDown = false; el.style.cursor = 'grab'; });
+  el.addEventListener('mouseup',    () => { isDown = false; el.style.cursor = 'grab'; });
+  el.addEventListener('mousemove',  e => {
+    if (!isDown) return;
+    const x    = e.pageX - el.offsetLeft;
+    const walk = (x - startX) * 1.5; // 1.5× multiplier feels natural
+    el.scrollLeft = scrollLeft - walk;
+  });
+  el.style.cursor = 'grab';
+}
+
+// Apply to every horizontally-scrollable bar in the app
+['chips', 'pill-chips', 'nb-cats'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) enableDragScroll(el);
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 const GH_KEY = (typeof GPS_CONFIG !== 'undefined') ? GPS_CONFIG.graphhopperKey : ''; // kept for reference
 const ORS_KEY = (typeof GPS_CONFIG !== 'undefined') ? GPS_CONFIG.orsKey : '';
 const OFFROUTE_M = 60, ARRIVE_M = 25, STEP_M = 30, REROUTE_COOL = 20000;
