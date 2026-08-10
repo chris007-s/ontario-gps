@@ -727,14 +727,23 @@ async function geocode(q){
     clean.replace(/^\d+\s+/,'') + ', Ontario, Canada', // without street number
   ].filter((s,i,a)=>a.indexOf(s)===i);
 
+  // Location bias — search near current GPS position first
+  const refLat = lastPos ? lastPos.lat : (startLL ? startLL.lat : 43.70);
+  const refLng = lastPos ? lastPos.lng : (startLL ? startLL.lng : -79.45);
+  const radius = 0.35;
+  const viewbox = `${refLng-radius},${refLat+radius},${refLng+radius},${refLat-radius}`;
+
   const headers = {'Accept-Language':'en','User-Agent':'OntarioGPS/4.0'};
   for(const query of strategies){
     try{
-      const url=`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=ca`;
-      const d=await(await fetch(url,{headers,signal:AbortSignal.timeout(8000)})).json();
-      if(d&&d.length){
-        dlog(`Geocode: "${query}" → ${d[0].display_name}`);
-        return {lat:parseFloat(d[0].lat), lng:parseFloat(d[0].lon)};
+      // Try bounded first (only near user), then biased-unbounded
+      for(const bounded of ['1','0']){
+        const url=`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=ca&viewbox=${viewbox}&bounded=${bounded}`;
+        const d=await(await fetch(url,{headers,signal:AbortSignal.timeout(8000)})).json();
+        if(d&&d.length){
+          dlog(`Geocode: "${query}" bounded=${bounded} → ${d[0].display_name}`);
+          return {lat:parseFloat(d[0].lat), lng:parseFloat(d[0].lon)};
+        }
       }
     }catch(e){ dlog(`Geocode error: ${e.message}`); }
   }
@@ -744,52 +753,58 @@ async function geocode(q){
 async function fetchSuggestions(q){
   if(q.length < 3) return [];
 
-  // Build multiple query strategies — try each until we get results.
-  // Nominatim can miss "583 Queens Dr" but find "Queens Drive Toronto".
+  // Expand abbreviations
   const clean = q.trim()
-    .replace(/\bDr\b/gi,    'Drive')
-    .replace(/\bSt\b/gi,    'Street')
-    .replace(/\bAve\b/gi,   'Avenue')
-    .replace(/\bBlvd\b/gi,  'Boulevard')
-    .replace(/\bRd\b/gi,    'Road')
-    .replace(/\bCrt\b/gi,   'Court')
-    .replace(/\bCt\b/gi,    'Court')
-    .replace(/\bPl\b/gi,    'Place')
-    .replace(/\bPkwy\b/gi,  'Parkway')
-    .replace(/\bCres\b/gi,  'Crescent')
-    .replace(/\bCr\b/gi,    'Crescent')
-    .replace(/\bTer\b/gi,   'Terrace')
-    .replace(/\bLn\b/gi,    'Lane')
-    .replace(/\bHwy\b/gi,   'Highway')
+    .replace(/\bDr\b/gi,'Drive').replace(/\bSt\b/gi,'Street')
+    .replace(/\bAve\b/gi,'Avenue').replace(/\bBlvd\b/gi,'Boulevard')
+    .replace(/\bRd\b/gi,'Road').replace(/\bCrt\b/gi,'Court')
+    .replace(/\bCt\b/gi,'Court').replace(/\bPl\b/gi,'Place')
+    .replace(/\bPkwy\b/gi,'Parkway').replace(/\bCres\b/gi,'Crescent')
+    .replace(/\bCr\b/gi,'Crescent').replace(/\bTer\b/gi,'Terrace')
+    .replace(/\bLn\b/gi,'Lane').replace(/\bHwy\b/gi,'Highway')
     .trim();
 
-  // Strip postal code from query — Nominatim handles it poorly inline
+  // Strip postal code
   const noPostal = clean.replace(/\b[A-Za-z]\d[A-Za-z]\s*\d[A-Za-z]\d\b/g,'').trim();
 
-  const strategies = [
-    noPostal + ', Ontario, Canada',
-    noPostal + ', Toronto',
-    noPostal + ', Ontario',
-    // If query has a number prefix (street address), also try without number
-    noPostal.replace(/^\d+\s+/, '') + ', Ontario, Canada',
-  ].filter((s,i,a) => a.indexOf(s)===i); // dedupe
+  // ── Location bias ──────────────────────────────────────────────────────────
+  // Use current GPS position to build a viewbox around the user.
+  // This makes "Queens Drive" find the one near YOU, not one in Kingsville.
+  // Fall back to GTA bounding box if GPS not yet known.
+  let viewbox, bounded;
+  const refLat = lastPos ? lastPos.lat : (startLL ? startLL.lat : 43.70);
+  const refLng = lastPos ? lastPos.lng : (startLL ? startLL.lng : -79.45);
+  const radius = 0.35; // ~35km box around current position
+  viewbox = `${refLng-radius},${refLat+radius},${refLng+radius},${refLat-radius}`;
+  bounded = '1'; // ONLY return results inside this box
 
   const headers = {'Accept-Language':'en','User-Agent':'OntarioGPS/4.0'};
 
-  for(const query of strategies){
+  // Strategy 1: bounded search near current position (most accurate)
+  // Strategy 2: same query, unbounded but biased (catches nearby results outside box)
+  // Strategy 3: without street number, bounded
+  const baseParams = `&format=json&limit=6&addressdetails=1&countrycodes=ca`;
+  const biasParams = `${baseParams}&viewbox=${viewbox}`;
+
+  const searches = [
+    // Near user, bounded — best results
+    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(noPostal+', Ontario, Canada')}${biasParams}&bounded=${bounded}`,
+    // Near user, bounded — try Toronto specifically
+    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(noPostal+', Toronto')}${biasParams}&bounded=${bounded}`,
+    // Near user, not bounded — catches results just outside box
+    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(noPostal+', Ontario, Canada')}${biasParams}&bounded=0`,
+    // Without street number, bounded
+    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(noPostal.replace(/^\d+\s+/,'')+', Ontario, Canada')}${biasParams}&bounded=${bounded}`,
+  ];
+
+  for(const url of searches){
     try{
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=6&addressdetails=1&countrycodes=ca`;
-      const d = await (await fetch(url, {
-        headers,
-        signal: AbortSignal.timeout(6000)
-      })).json();
+      const d = await (await fetch(url,{headers,signal:AbortSignal.timeout(6000)})).json();
       if(d && d.length){
-        dlog(`Autocomplete: "${query}" → ${d.length} results`);
+        dlog(`AC: ${d.length} results (near ${refLat.toFixed(3)},${refLng.toFixed(3)})`);
         return d;
       }
-    }catch(e){
-      dlog(`Autocomplete error: ${e.message}`);
-    }
+    }catch(e){ dlog(`AC error: ${e.message}`); }
   }
   return [];
 }
