@@ -294,6 +294,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
     <button class="chip" id="chip-nearby">📍 Nearby</button>
     <button class="chip" id="chip-share-trip">👥 Live Share</button>
     <button class="chip" id="chip-update">🔄 Update</button>
+    <button class="chip" id="chip-log" style="display:none">📋 Log</button>
     <button class="chip" id="chip-clear">✕ Clear</button>
     <span class="nobadge">NO 400-SERIES</span>
     <span id="quota-pill" style="background:#1e3a1e;color:#4ade80;border-radius:20px;padding:8px 10px;font-size:10px;font-weight:700;white-space:nowrap;flex-shrink:0;display:flex;align-items:center;gap:4px" title="API key status">🔑 <span id="quota-pill-val">…</span></span>
@@ -316,6 +317,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
   <button class="chip" id="p-favs">⭐ Favs</button>
   <button class="chip" id="p-nearby">📍 Nearby</button>
   <button class="chip" id="p-share-trip">👥 Live Share</button>
+  <button class="chip" id="p-log" style="display:none">📋 Log</button>
   <button class="chip" id="p-clear">✕ Clear</button>
   <span class="nobadge">NO 400-SERIES</span>
 </div>
@@ -564,8 +566,14 @@ function enableDragScroll(el) {
 
 const GH_KEY = (typeof GPS_CONFIG !== 'undefined') ? GPS_CONFIG.graphhopperKey : ''; // used by ghRoute for via-point routing only
 // ORS key read directly from GPS_CONFIG.orsKey in each function that needs it
-const OFFROUTE_M = 60, ARRIVE_M = 25, STEP_M = 30, REROUTE_COOL = 20000;
-const ARRIVAL_CONFIRMATIONS = 3, OFFROUTE_CONFIRMATIONS = 2, REROUTE_SUPPRESS_MS = 10000;
+const OFFROUTE_M = 35,   // snap distance — how close to route coords we check
+      OFFROUTE_TRIGGER_M = 80, // must be THIS far from route to count as off-route (was 60 — too tight)
+      ARRIVE_M = 25,
+      STEP_M = 50,         // final turn cue at 50m (was 30 — too late to react)
+      REROUTE_COOL = 25000; // 25s between reroutes (was 20s)
+const ARRIVAL_CONFIRMATIONS = 3,
+      OFFROUTE_CONFIRMATIONS = 4, // need 4 consecutive bad fixes (was 2 — caused false reroutes at turns)
+      REROUTE_SUPPRESS_MS = 15000;
 
 // State
 let startLL=null, endLL=null, startMk=null, endMk=null, routeLine=null, posMk=null;
@@ -865,6 +873,7 @@ async function getRoute(start, end){
     ],
     instructions: true,
     language: 'en',
+    preference: 'recommended',
     options: {
       avoid_features: ['highways', 'tollways', 'ferries']
     }
@@ -887,6 +896,49 @@ async function getRoute(start, end){
     const d = JSON.parse(text);
     if(d.error) throw new Error(`ORS: ${d.error.message||JSON.stringify(d.error)}`);
     const result = parseORS(d);
+
+    // ── POST-ROUTE TRUNK HIGHWAY CHECK ──────────────────────────────────────
+    // ORS avoid_features:'highways' only blocks OSM motorway-tagged roads.
+    // 403, QEW, and some connectors are tagged 'trunk' in OSM and slip through.
+    // If any step street name matches a known trunk highway, retry with a
+    // waypoint offset to force ORS onto a different corridor.
+    const TRUNK_HWYS = /\b(403|QEW|Queen Elizabeth|Queensway|gardiner|F\.G\. Gardiner|Hwy 403)\b/i;
+    const trunkStep = result.steps.find(s => s.street && TRUNK_HWYS.test(s.street));
+    if(trunkStep){
+      dlog(`⚠ Trunk highway detected in route: "${trunkStep.street}" — retrying with offset`);
+      // Offset midpoint slightly north to nudge ORS away from the corridor
+      const midLat = (start.lat + end.lat) / 2 + 0.012;
+      const midLng = (start.lng + end.lng) / 2;
+      const body2 = {
+        coordinates: [[start.lng,start.lat],[midLng,midLat],[end.lng,end.lat]],
+        instructions: true, language: 'en', preference: 'recommended',
+        options: { avoid_features: ['highways','tollways','ferries'] }
+      };
+      try{
+        const r2 = await fetch(url, {
+          method:'POST',
+          headers:{'Authorization':orsKey,'Content-Type':'application/json','Accept':'application/json'},
+          body: JSON.stringify(body2),
+          signal: AbortSignal.timeout(15000)
+        });
+        if(r2.ok){
+          const d2 = await r2.json();
+          if(!d2.error){
+            const result2 = parseORS(d2);
+            const stillTrunk = result2.steps.find(s => s.street && TRUNK_HWYS.test(s.street));
+            if(!stillTrunk){
+              dlog('Trunk avoided on retry ✅');
+              result2.highwayFree = true;
+              return result2;
+            } else {
+              dlog(`Still on trunk after retry: "${stillTrunk.street}" — using original`);
+            }
+          }
+        }
+      }catch(e2){ dlog('Trunk retry failed: '+e2.message); }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     result.highwayFree = true;
     return result;
   }catch(e){
@@ -999,15 +1051,38 @@ function speak(txt){
   window.speechSynthesis.speak(u);
 }
 function speakStep(s){
-  const dist=s.distance>=1000?(s.distance/1000).toFixed(1)+(lang==='es-MX'?' kilómetros':' kilometres'):(Math.round(s.distance)+(lang==='es-MX'?' metros':' metres'));
-  let t=spkDir(s.sign);
-  if(s.street&&s.sign!==4) t+=(lang==='es-MX'?' en ':' onto ')+s.street;
-  if(s.distance>0&&s.sign!==4) t+=(lang==='es-MX'?', luego continúe por ':', then continue for ')+dist;
-  if(s.lanes&&Array.isArray(s.lanes)){
-    const vc=s.lanes.filter(l=>l.valid||l.active).length;
-    if(vc) t+=lang==='es-MX'?`. Use ${vc===1?'el carril':'los carriles'} de la ${s.sign<0?'izquierda':'derecha'}`:`Use the ${s.sign<0?'left':'right'} ${vc===1?'lane':vc+' lanes'}`;
+  // Clean street name — ORS sometimes appends route numbers like "Dundas Street East, 5"
+  // Strip trailing ", N" number suffixes and "Highway N" prefixes for natural speech
+  function cleanStreet(name){
+    if(!name) return '';
+    return name
+      .replace(/,\s*\d+(\s*\w)?$/,'')     // remove trailing ", 5" or ", 5A"
+      .replace(/^Highway\s+\d+\w*/i,'')   // remove "Highway 403" prefix
+      .replace(/^Hwy\s+\d+\w*/i,'')       // remove "Hwy 403" prefix
+      .replace(/^ON-\d+\w*/i,'')          // remove "ON-403"
+      .trim();
   }
-  window.speak(t); // always use upgraded voice engine
+
+  const street = cleanStreet(s.street);
+  const dirTxt = spkDir(s.sign);
+
+  // Build the spoken phrase
+  let t = dirTxt;
+  if(street && s.sign!==4){
+    t += (lang==='es-MX' ? ' en ' : ' onto ') + street;
+  }
+
+  // Add lane guidance if available
+  if(s.lanes && Array.isArray(s.lanes)){
+    const vc = s.lanes.filter(l=>l.valid||l.active).length;
+    if(vc){
+      t += lang==='es-MX'
+        ? `. Use ${vc===1?'el carril':'los carriles'} de la ${s.sign<0?'izquierda':'derecha'}`
+        : `. Use the ${s.sign<0?'left':'right'} ${vc===1?'lane':vc+' lanes'}`;
+    }
+  }
+
+  window.speak(t);
 }
 // ── DRAW ROUTE ────────────────────────────────────────────────────────────────
 function drawRoute(result, opts={}){
@@ -1161,6 +1236,9 @@ function clearAll(){
   document.getElementById('pill-chips').classList.remove('show');
   document.getElementById('searchbar').classList.remove('hidden');
   document.getElementById('btn-open-fav-save').classList.remove('show');
+  document.getElementById('btn-debug-log').style.display='none';
+  document.getElementById('chip-log').style.display='none';
+  document.getElementById('p-log').style.display='none';
   showSheet('hidden');
   window.speechSynthesis?.cancel();
   hideAC();
@@ -1183,18 +1261,69 @@ document.addEventListener('visibilitychange', ()=>{
 
 // ── DEBUG LOG ─────────────────────────────────────────────────────────────────
 const debugLog = [];
+let _logSaveTimer = null;
+
 function dlog(msg){
   const ts = new Date().toISOString().substr(11,12);
   debugLog.push(`[${ts}] ${msg}`);
   console.log('GPS:', msg);
+  // Auto-save to localStorage every 30s while driving — survives background suspension
+  if(!_logSaveTimer){
+    _logSaveTimer = setInterval(()=>{
+      if(debugLog.length > 0){
+        try{
+          localStorage.setItem('gps_debug_log', debugLog.join('\n'));
+          localStorage.setItem('gps_debug_log_ts', Date.now());
+        }catch(e){}
+      }
+    }, 30000);
+  }
 }
+
 function downloadDebugLog(){
-  const blob = new Blob([debugLog.join('\n')], {type:'text/plain'});
+  // Merge in-memory log with any localStorage survivor from a previous session
+  let logText = debugLog.join('\n');
+  try{
+    const saved = localStorage.getItem('gps_debug_log');
+    const savedTs = localStorage.getItem('gps_debug_log_ts');
+    if(saved && saved !== logText){
+      const age = savedTs ? Math.round((Date.now()-savedTs)/60000) : '?';
+      logText = `=== RECOVERED LOG (saved ${age} min ago) ===\n${saved}\n\n=== CURRENT SESSION ===\n${logText}`;
+    }
+  }catch(e){}
+  const blob = new Blob([logText || '(no log data)'], {type:'text/plain'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href=url; a.download=`gps-debug-${Date.now()}.txt`; a.click();
+  a.href=url;
+  a.download=`gps-debug-${new Date().toISOString().replace(/[:.]/g,'-')}.txt`;
+  a.click();
   URL.revokeObjectURL(url);
 }
+
+function clearSavedLog(){
+  try{ localStorage.removeItem('gps_debug_log'); localStorage.removeItem('gps_debug_log_ts'); }catch(e){}
+  debugLog.length = 0;
+  dlog('Log cleared');
+}
+
+// Check for a recovered log from a previous suspended/crashed session
+(function checkRecoveredLog(){
+  try{
+    const saved = localStorage.getItem('gps_debug_log');
+    const savedTs = localStorage.getItem('gps_debug_log_ts');
+    if(saved && savedTs){
+      const age = Math.round((Date.now()-savedTs)/60000);
+      if(age < 120){ // only surface logs less than 2 hours old
+        dlog(`RECOVERED: found log from ${age} min ago — tap 📋 Log to download`);
+        // Show log button so user knows there's something to download
+        document.getElementById('btn-debug-log').style.display='flex';
+        document.getElementById('chip-log').style.display='';
+        document.getElementById('p-log').style.display='';
+      }
+    }
+  }catch(e){}
+})();
+
 document.getElementById('btn-debug-log').addEventListener('click', downloadDebugLog);
 function updateWorkflowState(){
   const hasStart = !!startLL;
@@ -1288,16 +1417,15 @@ function updateNavigationFollow(rawLL, heading){
   if(posMk) posMk.setLatLng([display.lat,display.lng]);
   else posMk=L.marker([display.lat,display.lng],{icon:myIcon(),zIndexOffset:1000}).addTo(map);
 
-  // Follow mode — Google Maps style: dot sits in the lower-third of the screen.
-  // Offset the map centre upward so the position marker appears lower on screen.
+  // Follow mode — Google Maps style: force zoom 17, dot in lower third.
   if(tracking && map){
-    const z      = Math.max(map.getZoom(), 17);
+    const z      = 17;  // always zoom to 17 while driving, don't let user drift out
     const mapH   = map.getSize().y;
-    const offset = mapH * 0.25;
+    const offset = mapH * 0.30;  // 30% offset — dot sits in lower third
     const centre = map.project([display.lat, display.lng], z);
     centre.y    -= offset;
     const shifted = map.unproject(centre, z);
-    map.setView(shifted, z, {animate:true, duration:0.3, easeLinearity:0.5});
+    map.setView(shifted, z, {animate:true, duration:0.5, easeLinearity:0.25, noMoveStart:true});
   }
 
   // Keep a useful heading value for future bearing-aware UI.
@@ -1329,6 +1457,8 @@ function startDrive(){
   suppressOffRouteUntil=0;
   rerouting=false;
   document.getElementById('btn-debug-log').style.display='flex';
+  document.getElementById('chip-log').style.display='';
+  document.getElementById('p-log').style.display='';
   document.getElementById('chip-drive').textContent='⏹ Stop';
   document.getElementById('chip-drive').classList.remove('green');
   document.getElementById('chip-drive').classList.add('driving');
@@ -1336,6 +1466,12 @@ function startDrive(){
   document.getElementById('p-drive').classList.add('driving');
   document.getElementById('nav').style.display='flex';
   document.getElementById('nav').style.flexDirection='column';
+  // Push map up so blue route line isn't hidden behind nav bar
+  setTimeout(()=>{
+    const navH = document.getElementById('nav').offsetHeight;
+    map.getContainer().style.paddingBottom = navH + 'px';
+    map.invalidateSize();
+  }, 100);
   showSheet('hidden');
   if(startLL) map.setView([startLL.lat, startLL.lng], 17, {animate:true});
   watchId=navigator.geolocation.watchPosition(onPos, onGPSErr,
@@ -1343,7 +1479,11 @@ function startDrive(){
 }
 function stopDrive(){
   releaseWakeLock();
-  document.getElementById('btn-debug-log').style.display='none';
+  // Keep log button visible after stopping so user can download
+  // btn-debug-log stays shown; clear the auto-save timer
+  if(_logSaveTimer){ clearInterval(_logSaveTimer); _logSaveTimer=null; }
+  // Final save to localStorage on stop
+  try{ if(debugLog.length>0) localStorage.setItem('gps_debug_log', debugLog.join('\n')); }catch(e){}
   dlog('Drive stopped — total dist driven: '+distanceDriven.toFixed(0)+'m');
   if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
   tracking=false;
@@ -1353,6 +1493,8 @@ function stopDrive(){
   document.getElementById('p-drive').textContent='▶ Drive';
   document.getElementById('p-drive').classList.remove('driving');
   document.getElementById('nav').style.display='none';
+  map.getContainer().style.paddingBottom = '';
+  map.invalidateSize();
   document.getElementById('offroute').style.display='none';
   offRouteConfirmations=0;
   rerouting=false;
@@ -1413,9 +1555,9 @@ async function onPos(pos){
   const dist=nearestDist(ll,route.coords);
   const banner=document.getElementById('offroute');
 
-  // Require two consecutive GPS fixes off the route before recalculating.
-  // This filters normal phone GPS jumps.
-  if(dist>OFFROUTE_M && Date.now()>=suppressOffRouteUntil){
+  // Suppress off-route check briefly after a step advance — normal GPS drift
+  // at intersections can look like going off-route even when correctly turning.
+  if(dist>OFFROUTE_TRIGGER_M && Date.now()>=suppressOffRouteUntil){
     offRouteConfirmations++;
     dlog(`OFF ROUTE ${offRouteConfirmations}/${OFFROUTE_CONFIRMATIONS}: ${dist.toFixed(0)}m`);
 
@@ -1429,6 +1571,7 @@ async function onPos(pos){
     if(!rerouting && now-lastReroute>REROUTE_COOL){
       rerouting=true;
       lastReroute=now;
+      window.speechSynthesis?.cancel();
       window.speak('Recalculating route');
       try{
         const r=await getRoute(ll,endLL);
@@ -1465,7 +1608,9 @@ async function onPos(pos){
     if(npt && ns.sign!==4){
       const distToTurn=haversine(ll,{lat:npt[0],lng:npt[1]});
       if(distToTurn<STEP_M){
-        // Stage 2 — final
+        // Stage 2 — final cue, advance nav card
+        // Suppress off-route detection for 8s after turn — GPS drifts at intersections
+        suppressOffRouteUntil = Math.max(suppressOffRouteUntil, Date.now() + 8000);
         updateNav(stepIdx+1);
         speakStep(ns);
       } else if(distToTurn<300){
@@ -1474,12 +1619,22 @@ async function onPos(pos){
         const wk='w'+(stepIdx+1);
         if(!route._warned[wk]){
           route._warned[wk]=true;
-          const distStr=distToTurn>=1000
-            ?(distToTurn/1000).toFixed(1)+(lang==='es-MX'?' kilómetros':' kilometres')
-            :(Math.round(distToTurn/10)*10)+(lang==='es-MX'?' metros':' metres');
-          const prep=lang==='es-MX'?'En ':'In ';
-          const dirTxt=(lang==='es-MX'?SPK_ES:SPK_EN)[String(ns.sign)]||'Continue';
-          const onto=ns.street?(lang==='es-MX'?' en ':' onto ')+ns.street:'';
+          // Round to nearest 50m for natural speech ("In 250 metres" not "In 247 metres")
+          const rounded = Math.round(distToTurn/50)*50;
+          const distStr = rounded>=1000
+            ?(rounded/1000).toFixed(1)+(lang==='es-MX'?' kilómetros':' kilometres')
+            :rounded+(lang==='es-MX'?' metros':' metres');
+          const prep    = lang==='es-MX'?'En ':'In ';
+          const dirTxt  = (lang==='es-MX'?SPK_ES:SPK_EN)[String(ns.sign)]||'Continue';
+          // Clean street name same as speakStep
+          const rawStreet = ns.street||'';
+          const street = rawStreet
+            .replace(/,\s*\d+(\s*\w)?$/,'')
+            .replace(/^Highway\s+\d+\w*/i,'')
+            .replace(/^Hwy\s+\d+\w*/i,'')
+            .replace(/^ON-\d+\w*/i,'')
+            .trim();
+          const onto = street?(lang==='es-MX'?' en ':' onto ')+street:'';
           window.speak(prep+distStr+', '+dirTxt+onto);
         }
       }
@@ -2420,6 +2575,8 @@ document.getElementById('chip-nearby').addEventListener('click',()=>{
   loadNearby('fuel');
 });
 document.getElementById('chip-share-trip').addEventListener('click', openShareTrip);
+document.getElementById('chip-log').addEventListener('click', downloadDebugLog);
+document.getElementById('p-log').addEventListener('click', downloadDebugLog);
 document.getElementById('p-nearby').addEventListener('click',()=>{
   document.getElementById('nearby-modal').classList.add('open');
   loadNearby('fuel');
