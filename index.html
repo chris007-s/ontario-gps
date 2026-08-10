@@ -17,6 +17,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#e8edf0}
@@ -623,7 +624,7 @@ let acTimer=null;
 let viaPickMode=false; // declared here — used in map click handler below
 
 // ── MAP ──────────────────────────────────────────────────────────────────────
-const map = L.map('map', {zoomControl:false, attributionControl:true})
+const map = L.map('map', {zoomControl:false, attributionControl:true, rotate:true, rotateControl:false})
   .setView([43.72, -79.4], 12);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution:'© <a href="https://www.openstreetmap.org/copyright">OSM</a>', maxZoom:19
@@ -901,9 +902,14 @@ document.getElementById('inp-to').addEventListener('keydown', e=>{
   const inp = document.getElementById('inp-to');
   let lastVal = '';
   setInterval(()=>{
+    // Don't poll during active drive — avoids geocoding GPS coords that
+    // appear in the field, and saves battery
+    if(tracking) return;
     const v = inp.value.trim();
     if(v !== lastVal){
       lastVal = v;
+      // Skip raw coordinates — not a valid search query
+      if(/^-?\d+\.?\d*\s*,\s*-?\d+\.?\d*$/.test(v)) return;
       if(v.length >= 3){
         clearTimeout(acTimer);
         acTimer = setTimeout(async()=>{
@@ -1789,17 +1795,22 @@ function smoothBearing(current, target, alpha=0.25){
 
 function applyMapRotation(bearing){
   mapBearing = bearing;
-  const rot = `rotate(${-bearing}deg)`;
-  // Only rotate the tile pane — rotating marker/overlay panes breaks Leaflet
-  const tilePane = map.getContainer().querySelector('.leaflet-tile-pane');
-  if(tilePane) tilePane.style.transform = rot;
-  // Also rotate the route polyline pane so the blue line stays aligned with tiles
-  const overlayPane = map.getContainer().querySelector('.leaflet-overlay-pane');
-  if(overlayPane){
-    overlayPane.style.transformOrigin = '50% 50%';
-    overlayPane.style.transform = rot;
+  // Use leaflet-rotate plugin — handles tile repositioning correctly
+  // so the map rotates like Google Maps without tiles shifting
+  if(map.setBearing){
+    map.setBearing(bearing);
+  } else {
+    // Fallback: CSS rotate on tile pane only (imperfect but works)
+    const rot = `rotate(${-bearing}deg)`;
+    const tilePane = map.getContainer().querySelector('.leaflet-tile-pane');
+    if(tilePane) tilePane.style.transform = rot;
+    const overlayPane = map.getContainer().querySelector('.leaflet-overlay-pane');
+    if(overlayPane){
+      overlayPane.style.transformOrigin = '50% 50%';
+      overlayPane.style.transform = rot;
+    }
   }
-  // Counter-rotate the position marker arrow so it always points up on screen
+  // Counter-rotate position marker so arrow always points up on screen
   if(posMk && posMk.getElement){
     const el = posMk.getElement();
     if(el) el.style.transform = `rotate(${bearing}deg)`;
