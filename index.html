@@ -1879,11 +1879,11 @@ function updateNavigationFollow(rawLL, heading){
   let bearing = null;
   const spd = rawLL.speed != null ? rawLL.speed * 3.6 : null;
 
-  if(typeof heading==='number' && isFinite(heading) && heading>=0 && spd!=null && spd>8){
+  if(typeof heading==='number' && isFinite(heading) && heading>=0 && spd!=null && spd>3){
     bearing = heading;
   } else if(lastBearingPos){
     const moved = haversine(lastBearingPos, display);
-    if(moved > 10) bearing = calcBearing(lastBearingPos, display);
+    if(moved > 3) bearing = calcBearing(lastBearingPos, display);
   }
 
   if(bearing !== null){
@@ -1891,6 +1891,9 @@ function updateNavigationFollow(rawLL, heading){
     lastBearingPos = {lat:display.lat, lng:display.lng};
     if(headingUpMode && tracking){
       const smoothed = smoothBearing(mapBearing, bearing);
+      if(Math.abs(smoothed - mapBearing) > 1){ // only log meaningful changes
+        dlog(`Bearing: ${bearing.toFixed(0)}° → smoothed ${smoothed.toFixed(0)}°`);
+      }
       applyMapRotation(smoothed);
     }
   } else if(lastBearingPos === null){
@@ -1939,6 +1942,7 @@ function startDrive(){
   document.getElementById('chip-log').style.display='';
   document.getElementById('p-log').style.display='';
   document.getElementById('btn-north-up').style.display='flex';
+  document.getElementById('btn-north-up').textContent='⬆'; // show heading-up immediately
   headingUpMode = true;
   lastBearingPos = null;
   mapBearing = 0;
