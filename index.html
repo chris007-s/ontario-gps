@@ -674,6 +674,30 @@ document.getElementById('inp-to').addEventListener('input', e=>{
   }, 400);
 });
 
+// keyup + focus: fallback triggers for mobile emulators and Android Chrome
+// builds where the 'input' event fires late or not at all.
+// Safe on real phones too — clearTimeout prevents double-firing.
+document.getElementById('inp-to').addEventListener('keyup', e=>{
+  const v = e.target.value.trim();
+  if(v.length < 3){ hideAC(); return; }
+  clearTimeout(acTimer);
+  acTimer = setTimeout(async()=>{
+    const results = await fetchSuggestions(v);
+    showAC(results);
+  }, 400);
+});
+
+document.getElementById('inp-to').addEventListener('focus', e=>{
+  const v = e.target.value.trim();
+  if(v.length >= 3){
+    clearTimeout(acTimer);
+    acTimer = setTimeout(async()=>{
+      const results = await fetchSuggestions(v);
+      showAC(results);
+    }, 400);
+  }
+});
+
 document.getElementById('inp-to').addEventListener('blur', ()=>{
   setTimeout(hideAC, 200);
 });
