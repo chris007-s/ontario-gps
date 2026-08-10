@@ -751,7 +751,6 @@ async function geocode(q){
 async function fetchSuggestions(q){
   if(q.length < 3) return [];
 
-  // Expand abbreviations
   const clean = q.trim()
     .replace(/\bDr\b/gi,'Drive').replace(/\bSt\b/gi,'Street')
     .replace(/\bAve\b/gi,'Avenue').replace(/\bBlvd\b/gi,'Boulevard')
@@ -761,46 +760,52 @@ async function fetchSuggestions(q){
     .replace(/\bCr\b/gi,'Crescent').replace(/\bTer\b/gi,'Terrace')
     .replace(/\bLn\b/gi,'Lane').replace(/\bHwy\b/gi,'Highway')
     .trim();
-
-  // Strip postal code
   const noPostal = clean.replace(/\b[A-Za-z]\d[A-Za-z]\s*\d[A-Za-z]\d\b/g,'').trim();
 
-  // ── Location bias ──────────────────────────────────────────────────────────
-  // Use current GPS position to build a viewbox around the user.
-  // This makes "Queens Drive" find the one near YOU, not one in Kingsville.
-  // Fall back to GTA bounding box if GPS not yet known.
-  let viewbox, bounded;
   const refLat = lastPos ? lastPos.lat : (startLL ? startLL.lat : 43.70);
   const refLng = lastPos ? lastPos.lng : (startLL ? startLL.lng : -79.45);
-  const radius = 0.6; // ~60km box around current position
-  viewbox = `${refLng-radius},${refLat+radius},${refLng+radius},${refLat-radius}`;
-  bounded = '1'; // ONLY return results inside this box
-
+  const radius = 0.6;
+  const viewbox = `${refLng-radius},${refLat+radius},${refLng+radius},${refLat-radius}`;
   const headers = {'Accept-Language':'en','User-Agent':'OntarioGPS/4.0'};
 
-  // Strategy 1: bounded search near current position (most accurate)
-  // Strategy 2: same query, unbounded but biased (catches nearby results outside box)
+  // ── Strategy 1: Photon (fast OSM geocoder, usually <1s) ──────────────────
+  try{
+    const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(noPostal)}&limit=6&lang=en&lat=${refLat}&lon=${refLng}&bbox=${refLng-radius},${refLat-radius},${refLng+radius},${refLat+radius}`;
+    const resp = await fetch(photonUrl, {signal: AbortSignal.timeout(5000)});
+    const data = await resp.json();
+    if(data && data.features && data.features.length){
+      const canadian = data.features.filter(f=>
+        f.properties.country==='Canada' || f.properties.countrycode==='CA'
+      );
+      if(canadian.length){
+        dlog(`AC: ${canadian.length} results from Photon`);
+        return canadian.map(f=>({
+          lat: f.geometry.coordinates[1],
+          lon: f.geometry.coordinates[0],
+          display_name: [
+            f.properties.housenumber ? f.properties.housenumber+' '+f.properties.street : (f.properties.name||''),
+            f.properties.city||f.properties.town||f.properties.village||'',
+            f.properties.state||'Ontario',
+            'Canada'
+          ].filter(Boolean).join(', ')
+        }));
+      }
+    }
+  }catch(e){ dlog(`AC Photon: ${e.message}`); }
+
+  // ── Strategy 2: Nominatim fallback ───────────────────────────────────────
   const baseParams = `&format=json&limit=6&addressdetails=1&countrycodes=ca`;
   const biasParams = `${baseParams}&viewbox=${viewbox}`;
-
   const searches = [
-    // Biased toward user but NOT bounded — catches Vaughan, Brampton, Mississauga etc.
     `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(noPostal+', Ontario, Canada')}${biasParams}&bounded=0`,
-    // Try with just Ontario (no "Canada" suffix)
     `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(noPostal+', Ontario')}${biasParams}&bounded=0`,
-    // Without street number — finds the street when exact address isn't in OSM
     `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(noPostal.replace(/^\d+\s+/,'')+', Ontario, Canada')}${biasParams}&bounded=0`,
-    // Last resort — no viewbox at all, just Canada
     `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(noPostal+', Ontario, Canada')}${baseParams}`,
   ];
-
   for(const url of searches){
     try{
-      const d = await (await fetch(url,{headers,signal:AbortSignal.timeout(12000)})).json();
-      if(d && d.length){
-        dlog(`AC: ${d.length} results (near ${refLat.toFixed(3)},${refLng.toFixed(3)})`);
-        return d;
-      }
+      const d = await (await fetch(url,{headers,signal:AbortSignal.timeout(20000)})).json();
+      if(d && d.length){ dlog(`AC: ${d.length} results from Nominatim`); return d; }
     }catch(e){ dlog(`AC error: ${e.message}`); }
   }
   dlog(`AC: no results for "${q}" after all strategies`);
@@ -1150,7 +1155,7 @@ async function routeValhalla(start, end, waypoints=[]){
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(12000)
+    signal: AbortSignal.timeout(20000)
   });
   if(!r.ok) throw new Error(`Valhalla HTTP ${r.status}`);
   const d = await r.json();
