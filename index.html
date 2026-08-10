@@ -807,9 +807,10 @@ async function fetchSuggestions(q){
   return [];
 }
 
+const acList = document.getElementById('ac-list');
+
 function showAC(results){
   if(!results || !results.length){
-    // Show a "not found" hint instead of silent empty dropdown
     acList.innerHTML = `<div class="ac-item" style="opacity:0.6;pointer-events:none">
       <span class="ac-icon">🔍</span>
       <div class="ac-text"><div class="ac-main">No results found</div>
