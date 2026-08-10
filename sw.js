@@ -1,84 +1,67 @@
-// Ontario GPS — Service Worker v1
-// Caches the app shell so it loads instantly offline
-// Map tiles are cached as you browse (up to 500 tiles)
+// Ontario GPS Service Worker
+// Caches app shell for offline use.
+// External APIs (ORS, Nominatim, Valhalla, TomTom, Firebase) are NEVER cached.
 
-const APP_CACHE = 'ont-gps-app-v6';
-const TILE_CACHE = 'ont-gps-tiles-v6';
-const MAX_TILES = 500;
-
-const APP_SHELL = [
+const CACHE_NAME = 'ont-gps-app-v7';
+const CACHE_URLS = [
   '/ontario-gps/',
   '/ontario-gps/index.html',
   '/ontario-gps/manifest.json',
   '/ontario-gps/icon-192.png',
   '/ontario-gps/icon-512.png',
-  'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
-  'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
 ];
 
-// ── Install: cache app shell ──────────────────────────────────────────────────
-self.addEventListener('install', evt => {
-  evt.waitUntil(
-    caches.open(APP_CACHE)
-      .then(cache => cache.addAll(APP_SHELL).catch(e => console.warn('Shell cache partial:', e)))
-      .then(() => self.skipWaiting())
+// URLs that must NEVER be intercepted by the SW — always fetch live
+const BYPASS_ORIGINS = [
+  'api.openrouteservice.org',
+  'nominatim.openstreetmap.org',
+  'router.project-osrm.org',
+  'api.tomtom.com',
+  'overpass-api.de',
+  'firebaseio.com',
+  'googleapis.com',
+  'gstatic.com',
+  'cdnjs.cloudflare.com',
+  'tile.openstreetmap.org',
+  'gps.oldproconstructionservices.com',  // Valhalla home server
+];
+
+self.addEventListener('install', e => {
+  e.waitUntil(
+    caches.open(CACHE_NAME).then(cache => cache.addAll(CACHE_URLS))
   );
+  self.skipWaiting();
 });
 
-// ── Activate: clean old caches ────────────────────────────────────────────────
-self.addEventListener('activate', evt => {
-  evt.waitUntil(
+self.addEventListener('activate', e => {
+  e.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys
-        .filter(k => k !== APP_CACHE && k !== TILE_CACHE)
-        .map(k => caches.delete(k))
-      )
-    ).then(() => self.clients.claim())
+      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+    )
   );
+  self.clients.claim();
 });
 
-// ── Fetch strategy ────────────────────────────────────────────────────────────
-self.addEventListener('fetch', evt => {
-  const url = new URL(evt.request.url);
+self.addEventListener('fetch', e => {
+  const url = new URL(e.request.url);
 
-  // Map tiles — cache-first with tile limit
-  if (url.hostname.includes('tile.openstreetmap.org')) {
-    evt.respondWith(tileStrategy(evt.request));
-    return;
+  // Always bypass SW for external APIs and the Valhalla home server
+  if(BYPASS_ORIGINS.some(origin => url.hostname.includes(origin))){
+    return; // let browser handle it directly — no SW interception
   }
 
-  // Routing / geocoding APIs — network only (must be live)
-  if (
-    url.hostname.includes('graphhopper.com') ||
-    url.hostname.includes('project-osrm.org') ||
-    url.hostname.includes('nominatim.openstreetmap.org')
-  ) {
-    evt.respondWith(fetch(evt.request));
-    return;
-  }
-
-  // App shell — cache-first, fallback to network
-  evt.respondWith(
-    caches.match(evt.request).then(cached => cached || fetch(evt.request))
+  // Cache-first for app shell files
+  e.respondWith(
+    caches.match(e.request).then(cached => {
+      if(cached) return cached;
+      return fetch(e.request).then(response => {
+        // Only cache same-origin successful responses
+        if(response && response.status === 200 && url.origin === self.location.origin){
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+        }
+        return response;
+      });
+    }).catch(() => caches.match('/ontario-gps/index.html'))
   );
 });
-
-async function tileStrategy(request) {
-  const cache = await caches.open(TILE_CACHE);
-  const cached = await cache.match(request);
-  if (cached) return cached;
-  try {
-    const response = await fetch(request);
-    if (response.ok) {
-      // Evict oldest tiles if over limit
-      const keys = await cache.keys();
-      if (keys.length >= MAX_TILES) {
-        await cache.delete(keys[0]);
-      }
-      cache.put(request, response.clone());
-    }
-    return response;
-  } catch {
-    return new Response('', { status: 503, statusText: 'Offline' });
-  }
-}

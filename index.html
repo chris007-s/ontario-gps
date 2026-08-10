@@ -966,16 +966,16 @@ function showPermDeniedBanner(){
 function showInitialPermBanner(){
   document.getElementById('perm-banner').classList.add('show');
 }
-function hidePerm(){
+window.hidePerm = function hidePerm(){
   document.getElementById('perm-banner').classList.remove('show');
-}
-function enableFromTyping(){
+};
+window.enableFromTyping = function enableFromTyping(){
   inpFrom.readOnly = false;
   inpFrom.value = '';
   inpFrom.placeholder = 'Type a start address';
   inpFrom.style.color = '#202124';
   inpFrom.focus();
-}
+};
 
 document.getElementById('btn-allow-loc').addEventListener('click', ()=>{ hidePerm(); doLocate(); });
 document.getElementById('btn-skip-loc').addEventListener('click', ()=>{ hidePerm(); enableFromTyping(); });
@@ -2368,11 +2368,11 @@ window.selectAltRoute = function(i){
   altPolylines.forEach((pl,j)=>pl.setStyle({weight:j===i?6:4,opacity:j===i?.9:.4}));
 };
 
-function closeRoutesModal(){
+window.closeRoutesModal = function closeRoutesModal(){
   document.getElementById('routes-modal').classList.remove('open');
   clearAltPolylines();
   cancelViaPick();
-}
+};
 
 function showRouteTab(tab){
   document.getElementById('rtab-styles').classList.toggle('active',tab==='styles');
