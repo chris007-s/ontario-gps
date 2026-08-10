@@ -296,7 +296,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
     <button class="chip" id="chip-update">🔄 Update</button>
     <button class="chip" id="chip-clear">✕ Clear</button>
     <span class="nobadge">NO 400-SERIES</span>
-    <span id="quota-pill" style="background:#1e3a1e;color:#4ade80;border-radius:20px;padding:8px 10px;font-size:10px;font-weight:700;white-space:nowrap;flex-shrink:0;display:flex;align-items:center;gap:4px" title="GraphHopper routes remaining today">🔑 <span id="quota-pill-val">…</span></span>
+    <span id="quota-pill" style="background:#1e3a1e;color:#4ade80;border-radius:20px;padding:8px 10px;font-size:10px;font-weight:700;white-space:nowrap;flex-shrink:0;display:flex;align-items:center;gap:4px" title="API key status">🔑 <span id="quota-pill-val">…</span></span>
   </div>
 </div>
 
@@ -336,7 +336,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 
 <!-- Bottom sheet -->
 <div id="sheet">
-  <div id="sheet-handle-wrap" id="sheet-drag">
+  <div id="sheet-handle-wrap">
     <div id="sheet-handle"></div>
     <div id="sheet-stats">
       <div><div class="sstat-val" id="s-km">-</div><div class="sstat-lbl">km</div></div>
@@ -392,7 +392,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
       <div id="routes-list"></div>
     </div>
     <!-- Via point panel -->
-    <div id="rpanel-via" style="display:none;flex:1;padding:16px;display:none;flex-direction:column;gap:12px">
+    <div id="rpanel-via" style="display:none;flex:1;padding:16px;flex-direction:column;gap:12px">
       <p style="font-size:13px;color:#5f6368;line-height:1.5">Force the route through a specific street or area. Tap the map to place a via point, or type an address.</p>
       <div style="display:flex;gap:8px">
         <input id="via-inp" type="text" placeholder="Type via address…" style="flex:1;border:1px solid #dadce0;border-radius:8px;padding:10px 12px;font-size:14px;outline:none;color:#202124"/>
@@ -521,7 +521,6 @@ const GPS_CONFIG = {
   graphhopperKey: 'd1780565-bd30-47ab-a986-623f4f96228c',
   orsKey:         'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjQxNWIwMWExNjgzNDQyZjM5MGM3ZWUzNjQ1N2ZkOTJjIiwiaCI6Im11cm11cjY0In0=',
   firebaseUrl:    'https://ontario-gps-default-rtdb.firebaseio.com',
-  foursquareKey:  'OGPT4MXUSBG5PHFY0BEQ5OWKMG53BAWR1QAGPTYKGMZ3NQ5R',
   tomtomKey:      '6CjyhrUhr6acXHhP6xb1f6epWOYP60Mx',
   myName:         'christo'
 };
@@ -563,8 +562,8 @@ function enableDragScroll(el) {
 });
 // ─────────────────────────────────────────────────────────────────────────────
 
-const GH_KEY = (typeof GPS_CONFIG !== 'undefined') ? GPS_CONFIG.graphhopperKey : ''; // kept for reference
-const ORS_KEY = (typeof GPS_CONFIG !== 'undefined') ? GPS_CONFIG.orsKey : '';
+const GH_KEY = (typeof GPS_CONFIG !== 'undefined') ? GPS_CONFIG.graphhopperKey : ''; // used by ghRoute for via-point routing only
+// ORS key read directly from GPS_CONFIG.orsKey in each function that needs it
 const OFFROUTE_M = 60, ARRIVE_M = 25, STEP_M = 30, REROUTE_COOL = 20000;
 const ARRIVAL_CONFIRMATIONS = 3, OFFROUTE_CONFIRMATIONS = 2, REROUTE_SUPPRESS_MS = 10000;
 
@@ -576,12 +575,13 @@ let voiceOn=true, tracking=false, watchId=null;
 const browserLang = navigator.language || navigator.userLanguage || 'en';
 let lang = browserLang.toLowerCase().startsWith('es') ? 'es-MX' : 'en-CA';
 let lastPos=null, lastReroute=0, lastSLFetch=0, lastSLLL=null;
-let distanceDriven=0, driveStartLL=null, arrivedFlag=false;
+let distanceDriven=0, arrivedFlag=false;
 let rerouting=false, arrivalConfirmations=0, offRouteConfirmations=0, suppressOffRouteUntil=0;
 const MIN_DRIVE_BEFORE_ARRIVE=200; // must travel 200m before arrival can trigger
 let favs=[];
 let sheetState='hidden';
 let acTimer=null;
+let viaPickMode=false; // declared here — used in map click handler below
 
 // ── MAP ──────────────────────────────────────────────────────────────────────
 const map = L.map('map', {zoomControl:false, attributionControl:true})
@@ -845,10 +845,53 @@ document.getElementById('clr-to').addEventListener('click', ()=>{
 });
 
 // ── ROUTING — OpenRouteService (free, supports highway avoidance) ─────────────
+// ── 400-SERIES HIGHWAY AVOIDANCE POLYGONS ─────────────────────────────────────
+// Bounding boxes around every 400-series highway corridor in Ontario including
+// their on/off ramps and collector/express connections. ORS avoid_polygons
+// prevents routing anywhere near these corridors, not just on them.
+// Format: array of [lng, lat] rings (GeoJSON polygon exterior).
+const HWY400_POLYGONS = [
+  // Hwy 400 (Barrie corridor) — wide enough to catch all ramps
+  [[-79.560,43.700],[-79.430,43.700],[-79.430,44.450],[-79.560,44.450],[-79.560,43.700]],
+  // Hwy 401 (full GTA span — Kingston Rd to Hwy 25)
+  [[-79.700,43.590],[-78.700,43.590],[-78.700,43.730],[-79.700,43.730],[-79.700,43.590]],
+  // Hwy 404 / Don Valley Pkwy / Hwy 40 connector
+  [[-79.390,43.650],[-79.320,43.650],[-79.320,44.050],[-79.390,44.050],[-79.390,43.650]],
+  // Hwy 407 ETR (full span)
+  [[-79.780,43.680],[-78.900,43.680],[-78.900,43.800],[-79.780,43.800],[-79.780,43.680]],
+  // Hwy 409 (Pearson airport spur)
+  [[-79.700,43.660],[-79.540,43.660],[-79.540,43.700],[-79.700,43.700],[-79.700,43.660]],
+  // Hwy 410 (Brampton)
+  [[-79.780,43.640],[-79.680,43.640],[-79.680,43.800],[-79.780,43.800],[-79.780,43.640]],
+  // Hwy 412 / 418 (Durham 407 connectors)
+  [[-79.070,43.860],[-78.960,43.860],[-78.960,44.020],[-79.070,44.020],[-79.070,43.860]],
+  // Hwy 416 (Ottawa spur — south of 401)
+  [[-75.740,44.980],[-75.640,44.980],[-75.640,45.420],[-75.740,45.420],[-75.740,44.980]],
+  // Hwy 417 (Ottawa / Queensway)
+  [[-76.040,45.310],[-75.530,45.310],[-75.530,45.430],[-76.040,45.430],[-76.040,45.310]],
+  // Hwy 427 (Etobicoke N-S)
+  [[-79.590,43.590],[-79.530,43.590],[-79.530,43.760],[-79.590,43.760],[-79.590,43.590]],
+  // QEW (Gardiner to Hamilton) — wide to catch all collector ramps
+  [[-79.900,43.490],[-79.200,43.490],[-79.200,43.650],[-79.900,43.650],[-79.900,43.490]],
+  // Hwy 403 (Mississauga / Hamilton)
+  [[-79.880,43.180],[-79.590,43.180],[-79.590,43.680],[-79.880,43.680],[-79.880,43.180]],
+  // Hwy 406 (Welland)
+  [[-79.270,42.970],[-79.200,42.970],[-79.200,43.100],[-79.270,43.100],[-79.270,42.970]],
+  // Hwy 420 (Niagara Falls spur)
+  [[-79.110,43.080],[-79.040,43.080],[-79.040,43.120],[-79.110,43.120],[-79.110,43.080]],
+];
+
+function buildAvoidPolygons(){
+  return {
+    type: 'MultiPolygon',
+    coordinates: HWY400_POLYGONS.map(ring => [ring])
+  };
+}
+
 async function getRoute(start, end){
   const orsKey = (typeof GPS_CONFIG!=='undefined') ? GPS_CONFIG.orsKey : '';
   if(!orsKey||orsKey==='YOUR_ORS_KEY_HERE'){
-    console.warn('ORS key missing — using OSRM fallback');
+    console.warn('ORS key missing — using OSRM fallback (highways NOT avoided)');
     return await osrm(start, end);
   }
 
@@ -861,7 +904,8 @@ async function getRoute(start, end){
     instructions: true,
     language: 'en',
     options: {
-      avoid_features: ['highways', 'tollways']
+      avoid_features: ['highways', 'tollways', 'ferries'],
+      avoid_polygons: buildAvoidPolygons()
     }
   };
 
@@ -880,13 +924,14 @@ async function getRoute(start, end){
     console.log('ORS HTTP:', r.status);
     if(!r.ok) throw new Error(`ORS HTTP ${r.status}: ${text.substring(0,200)}`);
     const d = JSON.parse(text);
-    console.log('ORS response structure:', JSON.stringify(d).substring(0,500));
     if(d.error) throw new Error(`ORS: ${d.error.message||JSON.stringify(d.error)}`);
-    return parseORS(d);
+    const result = parseORS(d);
+    result.highwayFree = true;
+    return result;
   }catch(e){
     console.error('ORS FAILED:', e.message);
     document.getElementById('s-km').textContent='HWY';
-    alert('Routing failed:\n\n'+e.message+'\n\nUsing backup router (may include highways).');
+    alert('Routing failed:\n\n'+e.message+'\n\nUsing backup router (highways NOT avoided — drive carefully).');
     return await osrm(start, end);
   }
 }
@@ -938,21 +983,6 @@ function orsTypeToSign(type){
   // 4=slight left, 5=slight right, 6=straight, 7=roundabout, 10=uturn
   const map={0:-2,1:2,2:-3,3:3,4:-1,5:1,6:0,7:0,10:-6,11:4};
   return map[type]??0;
-}
-
-function parseGH(data){
-  const p=data.paths[0];
-  const coords=p.points.coordinates.map(c=>[c[1],c[0]]);
-  const ld=(p.details||{}).lanes||[], rc=(p.details||{}).road_class||[];
-  const laneAt=i=>{ for(const s of ld)if(i>=s[0]&&i<s[1])return s[2]; return null; };
-  const rcAt=i=>{ for(const s of rc)if(i>=s[0]&&i<s[1])return s[2]||''; return ''; };
-  const steps=(p.instructions||[]).map(s=>({
-    text:s.text||'Continue', distance:s.distance||0, sign:s.sign||0,
-    street:s.street_name||s.name||'', exit:s.exit_number||null,
-    lanes:laneAt(s.interval?.[0]||0), road:rcAt(s.interval?.[0]||0),
-    ptIdx:s.interval?.[0]||0
-  }));
-  return {coords, steps, distance:p.distance, duration:p.time/1000, src:'GH'};
 }
 
 async function osrm(start,end){
@@ -1016,7 +1046,7 @@ function speakStep(s){
     const vc=s.lanes.filter(l=>l.valid||l.active).length;
     if(vc) t+=lang==='es-MX'?`. Use ${vc===1?'el carril':'los carriles'} de la ${s.sign<0?'izquierda':'derecha'}`:`Use the ${s.sign<0?'left':'right'} ${vc===1?'lane':vc+' lanes'}`;
   }
-  speak(t);
+  window.speak(t); // always use upgraded voice engine
 }
 // ── DRAW ROUTE ────────────────────────────────────────────────────────────────
 function drawRoute(result, opts={}){
@@ -1118,6 +1148,7 @@ function showSheet(state){
 }
 const sheetEl=document.getElementById('sheet');
 let dragY=null;
+// Touch drag (real phone)
 sheetEl.addEventListener('touchstart',e=>{dragY=e.touches[0].clientY;},{passive:true});
 sheetEl.addEventListener('touchend',e=>{
   if(dragY===null) return;
@@ -1126,6 +1157,18 @@ sheetEl.addEventListener('touchend',e=>{
   else if(dy<-30) showSheet(sheetState==='full'?'half':sheetState==='half'?'peek':'hidden');
   dragY=null;
 },{passive:true});
+// Mouse drag (desktop emulator)
+let sheetMouseDown=false, sheetStartY=0;
+sheetEl.addEventListener('mousedown',e=>{
+  sheetMouseDown=true; sheetStartY=e.clientY; e.preventDefault();
+});
+document.addEventListener('mouseup',e=>{
+  if(!sheetMouseDown) return;
+  const dy=sheetStartY-e.clientY;
+  if(dy>30) showSheet(sheetState==='peek'?'half':'full');
+  else if(dy<-30) showSheet(sheetState==='full'?'half':sheetState==='half'?'peek':'hidden');
+  sheetMouseDown=false;
+});
 document.getElementById('sheet-handle-wrap').addEventListener('click',()=>{
   showSheet(sheetState==='peek'?'half':sheetState==='half'?'full':'peek');
 });
@@ -1217,30 +1260,6 @@ function updateWorkflowState(){
   }
 }
 
-function clearAll(){
-  stopDrive();
-  [startMk,endMk,routeLine,posMk].forEach(m=>{ if(m) map.removeLayer(m); });
-  startMk=endMk=routeLine=posMk=null;
-  startLL=endLL=null; clickState=0; route=null; lastPos=null;
-  inpFrom.readOnly=true; inpFrom.value=''; inpFrom.style.color='';
-  inpFrom.placeholder='📍 My location (tap to change)';
-  document.getElementById('inp-to').value='';
-  document.getElementById('clr-from').style.display='none';
-  document.getElementById('clr-to').style.display='none';
-  document.getElementById('sheet-steps').innerHTML='';
-  document.getElementById('s-km').textContent='-';
-  document.getElementById('s-time').textContent='-';
-  document.getElementById('s-turns').textContent='-';
-  document.getElementById('pill').classList.remove('show');
-  document.getElementById('pill-chips').classList.remove('show');
-  document.getElementById('searchbar').classList.remove('hidden');
-  document.getElementById('btn-open-fav-save').classList.remove('show');
-  showSheet('hidden');
-  window.speechSynthesis?.cancel();
-  hideAC();
-  updateWorkflowState();
-}
-
 // ── DRIVE / TRACKING ──────────────────────────────────────────────────────────
 function haversine(a,b){
   const R=6371000,dLat=(b.lat-a.lat)*Math.PI/180,dLng=(b.lng-a.lng)*Math.PI/180;
@@ -1308,10 +1327,16 @@ function updateNavigationFollow(rawLL, heading){
   if(posMk) posMk.setLatLng([display.lat,display.lng]);
   else posMk=L.marker([display.lat,display.lng],{icon:myIcon(),zIndexOffset:1000}).addTo(map);
 
-  // Follow mode: keep the navigation position in the lower-middle of the map.
+  // Follow mode — Google Maps style: dot sits in the lower-third of the screen.
+  // Offset the map centre upward so the position marker appears lower on screen.
   if(tracking && map){
-    const z=Math.max(map.getZoom(),17);
-    map.setView([display.lat,display.lng],z,{animate:true,duration:.35});
+    const z      = Math.max(map.getZoom(), 17);
+    const mapH   = map.getSize().y;
+    const offset = mapH * 0.25;
+    const centre = map.project([display.lat, display.lng], z);
+    centre.y    -= offset;
+    const shifted = map.unproject(centre, z);
+    map.setView(shifted, z, {animate:true, duration:0.3, easeLinearity:0.5});
   }
 
   // Keep a useful heading value for future bearing-aware UI.
@@ -1333,7 +1358,6 @@ function startDrive(){
   dlog('Drive started — route: '+route.src+' '+((route.distance/1000).toFixed(1))+'km, steps:'+route.steps.length);
   tracking=true;
   distanceDriven=0;
-  driveStartLL=null;
   lastPos=null;
   arrivedFlag=false;
   arrivalConfirmations=0;
@@ -1382,7 +1406,6 @@ async function onPos(pos){
   const spd=pos.coords.speed!=null?Math.round(pos.coords.speed*3.6):null;
   document.getElementById('nav-spd').textContent=spd!=null?spd:'-';
 
-  if(!driveStartLL) driveStartLL=ll;
   const prevPos=lastPos;
   if(prevPos) distanceDriven+=haversine(prevPos,ll);
   lastPos=ll;
@@ -1425,7 +1448,60 @@ async function onPos(pos){
 
   fetchSpeedLimit(ll,spd);
 
-  if(!route||!endLL||arrivedFlag) return;
+  // ── PROACTIVE 400-SERIES AVOIDANCE ─────────────────────────────────────────
+  // Check if the current position is within 400m of any 400-series polygon.
+  // If so, and the route passes through it, trigger an early reroute before
+  // the driver reaches the on-ramp — not after.
+  if(tracking && route && !rerouting && Date.now()>=suppressOffRouteUntil){
+    const nearHwy = HWY400_POLYGONS.some(ring => {
+      // Simple bounding-box proximity check — fast, no library needed
+      const lngs = ring.map(p=>p[0]), lats = ring.map(p=>p[1]);
+      const minLng=Math.min(...lngs)-0.008, maxLng=Math.max(...lngs)+0.008;
+      const minLat=Math.min(...lats)-0.006, maxLat=Math.max(...lats)+0.006;
+      return ll.lng>=minLng && ll.lng<=maxLng && ll.lat>=minLat && ll.lat<=maxLat;
+    });
+    if(nearHwy){
+      // Check if any of the next 30 route coords pass through a polygon
+      const lookAheadCoords = route.coords.slice(
+        Math.max(0,Math.floor(navRouteIndex)),
+        Math.min(route.coords.length, Math.floor(navRouteIndex)+30)
+      );
+      const routeEntersHwy = lookAheadCoords.some(([clat,clng])=>
+        HWY400_POLYGONS.some(ring=>{
+          const lngs=ring.map(p=>p[0]),lats=ring.map(p=>p[1]);
+          return clng>=Math.min(...lngs) && clng<=Math.max(...lngs) &&
+                 clat>=Math.min(...lats) && clat<=Math.max(...lats);
+        })
+      );
+      if(routeEntersHwy){
+        dlog('⚠ Route approaches 400-series corridor — pre-emptive reroute');
+        rerouting=true;
+        lastReroute=Date.now();
+        window.speak('Rerouting to avoid highway');
+        document.getElementById('offroute').style.display='block';
+        document.getElementById('offroute').textContent='⚠ Avoiding highway — recalculating…';
+        try{
+          const r=await getRoute(ll,endLL);
+          placeStart(L.latLng(ll.lat,ll.lng),'📍 My location');
+          drawRoute(r,{silent:true});
+          lastPos=ll;
+          arrivalConfirmations=0;
+          offRouteConfirmations=0;
+          suppressOffRouteUntil=Date.now()+REROUTE_SUPPRESS_MS;
+          document.getElementById('offroute').style.display='none';
+          dlog('Pre-emptive reroute complete');
+        }catch(e){
+          document.getElementById('offroute').textContent='⚠ Reroute failed: '+e.message;
+          dlog('Pre-emptive reroute failed: '+e.message);
+          suppressOffRouteUntil=Date.now()+REROUTE_SUPPRESS_MS;
+        }finally{
+          rerouting=false;
+        }
+        return;
+      }
+    }
+  }
+  // ───────────────────────────────────────────────────────────────────────────
 
   const dist=nearestDist(ll,route.coords);
   const banner=document.getElementById('offroute');
@@ -1446,7 +1522,7 @@ async function onPos(pos){
     if(!rerouting && now-lastReroute>REROUTE_COOL){
       rerouting=true;
       lastReroute=now;
-      speak('Recalculating route');
+      window.speak('Recalculating route');
       try{
         const r=await getRoute(ll,endLL);
         placeStart(L.latLng(ll.lat,ll.lng),'📍 My location');
@@ -1473,15 +1549,32 @@ async function onPos(pos){
   offRouteConfirmations=0;
   banner.style.display='none';
 
-  // Advance normal turn instructions, but NEVER announce the routing
-  // engine's final "arrive" step here. Arrival is confirmed separately.
+  // ── TWO-STAGE TURN ANNOUNCEMENT (Google Maps style) ─────────────────────
+  // Stage 1: ~300m out — advance warning spoken once
+  // Stage 2: ~30m out  — final cue + nav card advances
   if(stepIdx<route.steps.length-1){
     const ns=route.steps[stepIdx+1];
     const npt=route.coords[Math.min(ns.ptIdx,route.coords.length-1)];
-    if(npt&&haversine(ll,{lat:npt[0],lng:npt[1]})<STEP_M){
-      if(ns.sign!==4){
+    if(npt && ns.sign!==4){
+      const distToTurn=haversine(ll,{lat:npt[0],lng:npt[1]});
+      if(distToTurn<STEP_M){
+        // Stage 2 — final
         updateNav(stepIdx+1);
         speakStep(ns);
+      } else if(distToTurn<300){
+        // Stage 1 — advance warning, fire once per step
+        if(!route._warned) route._warned={};
+        const wk='w'+(stepIdx+1);
+        if(!route._warned[wk]){
+          route._warned[wk]=true;
+          const distStr=distToTurn>=1000
+            ?(distToTurn/1000).toFixed(1)+(lang==='es-MX'?' kilómetros':' kilometres')
+            :(Math.round(distToTurn/10)*10)+(lang==='es-MX'?' metros':' metres');
+          const prep=lang==='es-MX'?'En ':'In ';
+          const dirTxt=(lang==='es-MX'?SPK_ES:SPK_EN)[String(ns.sign)]||'Continue';
+          const onto=ns.street?(lang==='es-MX'?' en ':' onto ')+ns.street:'';
+          window.speak(prep+distStr+', '+dirTxt+onto);
+        }
       }
     }
   }
@@ -1489,8 +1582,8 @@ async function onPos(pos){
   // Confirm arrival independently: minimum driven distance + destination
   // distance + three consecutive GPS fixes inside ARRIVE_M.
   const distToEnd=haversine(ll,{lat:endLL.lat,lng:endLL.lng});
-  const startDistToEnd=driveStartLL?haversine(driveStartLL,{lat:endLL.lat,lng:endLL.lng}):Infinity;
-  if(!arrivedFlag && distanceDriven>=MIN_DRIVE_BEFORE_ARRIVE && startDistToEnd>ARRIVE_M*3){
+  // Allow arrival even if start was close to destination — just require MIN driven distance
+  if(!arrivedFlag && distanceDriven>=MIN_DRIVE_BEFORE_ARRIVE){
     if(distToEnd<=ARRIVE_M){
       arrivalConfirmations++;
       dlog(`Arrival check ${arrivalConfirmations}/${ARRIVAL_CONFIRMATIONS}: ${distToEnd.toFixed(0)}m`);
@@ -1499,7 +1592,7 @@ async function onPos(pos){
         const finalStepIdx=route.steps.findIndex(s=>s.sign===4);
         if(finalStepIdx>=0) updateNav(finalStepIdx);
         if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
-        speak('You have arrived at your destination');
+        window.speak('You have arrived at your destination');
         setTimeout(()=>stopDrive(),2000);
       }
     }else{
@@ -1537,7 +1630,7 @@ async function fetchSpeedLimit(ll, curSpd){
         const over=curSpd!=null&&parseInt(curSpd)>parseInt(kmh);
         sign.style.borderColor=over?'#ea4335':'#202124';
         val.style.color=over?'#ea4335':'#202124';
-        if(over) speak(`Speed limit is ${kmh} kilometres per hour`);
+        if(over) window.speak(`Speed limit is ${kmh} kilometres per hour`);
       } else sign.classList.remove('show');
     } else sign.classList.remove('show');
   }catch(e){ console.warn('Speed limit:',e.message); }
@@ -1646,7 +1739,7 @@ window.jumpStep=jumpStep;
 
 // ── ALTERNATE ROUTES + VIA POINT ─────────────────────────────────────────────
 let altRoutes = [], selectedRouteIdx = 0;
-let viaLL = null, viaMk = null, viaPickMode = false;
+let viaLL = null, viaMk = null;
 let altPolylines = [];
 
 function parseGHPath(p){
@@ -1683,32 +1776,67 @@ async function ghRoute(points, opts={}){
 }
 
 async function fetchStyleRoutes(start, end){
-  // 3 different profiles: fastest back-road, shortest, balanced
-  const configs = [
-    {label:'⚡ Fastest back-road', badge:'Fastest', badgeCls:'fast', profile:'car'},
-    {label:'📏 Shortest distance', badge:'Shortest', badgeCls:'', profile:'car'},
-    {label:'🌿 Balanced / scenic', badge:'Scenic', badgeCls:'', profile:'car'},
-  ];
+  // All three style routes use ORS with full 400-series avoidance.
+  // GH does NOT support highway avoidance on the free tier — never use it here.
+  const orsKey = (typeof GPS_CONFIG!=='undefined') ? GPS_CONFIG.orsKey : '';
+  if(!orsKey){ return []; }
+
+  async function orsStyleRoute(waypoints, label, badge, badgeCls){
+    const coords = waypoints.map(p=>[p.lng, p.lat]);
+    const body = {
+      coordinates: coords,
+      instructions: true,
+      language: 'en',
+      options: {
+        avoid_features: ['highways','tollways','ferries'],
+        avoid_polygons: buildAvoidPolygons()
+      }
+    };
+    const r = await fetch('https://api.openrouteservice.org/v2/directions/driving-car',{
+      method:'POST',
+      headers:{'Authorization':orsKey,'Content-Type':'application/json','Accept':'application/json'},
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000)
+    });
+    if(!r.ok) throw new Error('ORS '+r.status);
+    const d = await r.json();
+    if(d.error) throw new Error(d.error.message||'ORS error');
+    const result = parseORS(d);
+    result.label = label;
+    result.badge = badge;
+    result.badgeCls = badgeCls;
+    result.highwayFree = true;
+    return result;
+  }
+
   const results = [];
-  // Route 1: fastest (standard)
+
+  // Route 1: direct ORS (fastest highway-free)
   try{
-    const paths = await ghRoute([start,end]);
-    results.push({...parseGHPath(paths[0]), label:configs[0].label, badge:configs[0].badge, badgeCls:configs[0].badgeCls});
-  }catch(e){console.warn(e);}
-  // Route 2: try alt_route for a different path
+    results.push(await orsStyleRoute([start,end],
+      '⚡ Fastest back-road', 'Fastest', 'fast'));
+  }catch(e){ console.warn('Style route 1 failed:', e.message); }
+
+  // Route 2: slight northward offset midpoint — forces a different corridor
   try{
-    const paths = await ghRoute([start,end],{algorithm:'alternative_route',maxPaths:'2'});
-    if(paths.length>1){
-      results.push({...parseGHPath(paths[1]), label:configs[1].label, badge:configs[1].badge, badgeCls:configs[1].badgeCls});
-    }
-  }catch(e){console.warn(e);}
-  // Route 3: route via a midpoint offset perpendicular to the main line
+    const mid1 = {
+      lat: (start.lat+end.lat)/2 + 0.018,
+      lng: (start.lng+end.lng)/2 - 0.010
+    };
+    results.push(await orsStyleRoute([start, mid1, end],
+      '🔀 Alternate corridor', 'Alternate', ''));
+  }catch(e){ console.warn('Style route 2 failed:', e.message); }
+
+  // Route 3: slight southward offset — third distinct path
   try{
-    const midLat = (start.lat+end.lat)/2 + (end.lng-start.lng)*0.015;
-    const midLng = (start.lng+end.lng)/2 - (end.lat-start.lat)*0.015;
-    const paths = await ghRoute([start,{lat:midLat,lng:midLng},end]);
-    results.push({...parseGHPath(paths[0]), label:configs[2].label, badge:configs[2].badge, badgeCls:configs[2].badgeCls});
-  }catch(e){console.warn(e);}
+    const mid2 = {
+      lat: (start.lat+end.lat)/2 - 0.018,
+      lng: (start.lng+end.lng)/2 + 0.010
+    };
+    results.push(await orsStyleRoute([start, mid2, end],
+      '🌿 Scenic / local roads', 'Scenic', ''));
+  }catch(e){ console.warn('Style route 3 failed:', e.message); }
+
   return results;
 }
 
@@ -1826,16 +1954,41 @@ async function placeVia(ll){
     html:'<div style="width:24px;height:24px;border-radius:50%;background:#f59e0b;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">V</div>'
   })}).addTo(map);
   const st=document.getElementById('via-status');
-  st.textContent='Via point set - routing...';
+  st.textContent='Via point set — routing (avoiding 400s)…';
   st.style.display='block';
   document.getElementById('btn-via-clear').style.display='block';
-  // Route through via point
+
+  // Use ORS with full 400-series avoidance — same as main routing
+  const orsKey=(typeof GPS_CONFIG!=='undefined')?GPS_CONFIG.orsKey:'';
+  if(!orsKey){ st.textContent='No ORS key — cannot route via point.'; return; }
   try{
-    const paths=await ghRoute([startLL,viaLL,endLL]);
-    const r=parseGHPath(paths[0]);
-    r.label='📍 Via point route';
+    const body={
+      coordinates:[
+        [startLL.lng,startLL.lat],
+        [ll.lng,ll.lat],
+        [endLL.lng,endLL.lat]
+      ],
+      instructions:true,
+      language:'en',
+      options:{
+        avoid_features:['highways','tollways','ferries'],
+        avoid_polygons:buildAvoidPolygons()
+      }
+    };
+    const r=await fetch('https://api.openrouteservice.org/v2/directions/driving-car',{
+      method:'POST',
+      headers:{'Authorization':orsKey,'Content-Type':'application/json','Accept':'application/json'},
+      body:JSON.stringify(body),
+      signal:AbortSignal.timeout(15000)
+    });
+    if(!r.ok) throw new Error('ORS '+r.status);
+    const d=await r.json();
+    if(d.error) throw new Error(d.error.message||'ORS error');
+    const result=parseORS(d);
+    result.label='📍 Via point route';
+    result.highwayFree=true;
     closeRoutesModal();
-    drawRoute(r);
+    drawRoute(result);
   }catch(e){
     st.textContent='Could not route via that point: '+e.message;
   }
@@ -1886,7 +2039,7 @@ document.getElementById('chip-lang').addEventListener('click',()=>{
   const btn = document.getElementById('chip-lang');
   btn.textContent = lang==='es-MX' ? '🇲🇽 ES' : '🇨🇦 EN';
   btn.classList.toggle('on', lang==='es-MX');
-  speak(lang==='es-MX' ? 'Cambié al español' : 'Switched to English');
+  window.speak(lang==='es-MX' ? 'Cambié al español' : 'Switched to English');
 });
 
 // ── SHARE LIVE LOCATION ───────────────────────────────────────────────────────
@@ -1932,29 +2085,31 @@ function loadVoices(){
 window.speechSynthesis.onvoiceschanged = loadVoices;
 loadVoices();
 
-// Override speak to use best voice and reset engine on lang switch
-const _origSpeak = speak;
-window._speakFixed = function(txt){
-  if(!voiceOn||!('speechSynthesis' in window)) return;
-  // Full reset to avoid robotic carry-over
-  window.speechSynthesis.cancel();
-  setTimeout(()=>{
-    const u = new SpeechSynthesisUtterance(txt);
-    u.lang = lang;
-    u.rate = 1.0;
-    u.pitch = 1.0;
-    const bestVoice = lang==='es-MX' ? bestVoiceES : bestVoiceEN;
-    if(bestVoice) u.voice = bestVoice;
-    u.onstart=()=>document.getElementById('vpip').style.display='block';
-    u.onend=u.onerror=()=>document.getElementById('vpip').style.display='none';
-    window.speechSynthesis.speak(u);
-  }, 50);
-};
-
-// Patch speak and speakStep to use fixed version
-const speak_orig = speak;
-// Redefine speak globally
-window.speak = window._speakFixed;
+// Upgrade speak() in-place so speakStep() and all callers automatically
+// use the best available voice without any redefinition gymnastics.
+(function upgradeSpeakInPlace(){
+  // Overwrite the function body by reassigning the local reference
+  // that speakStep() closes over — we do this by mutating the named
+  // function via a shared wrapper trick: replace body on the object.
+  // Simplest reliable way: redefine speak as a new function in this scope
+  // and reassign it on window so any window.speak() calls also work.
+  window.speak = function speak(txt){
+    if(!voiceOn||!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    setTimeout(()=>{
+      const u = new SpeechSynthesisUtterance(txt);
+      u.lang  = lang;
+      u.rate  = 1.0;
+      u.pitch = 1.0;
+      const bestVoice = lang==='es-MX' ? bestVoiceES : bestVoiceEN;
+      if(bestVoice) u.voice = bestVoice;
+      u.onstart  = ()=>document.getElementById('vpip').style.display='block';
+      u.onend    = ()=>document.getElementById('vpip').style.display='none';
+      u.onerror  = ()=>document.getElementById('vpip').style.display='none';
+      window.speechSynthesis.speak(u);
+    }, 50);
+  };
+})();
 
 // ── FIREBASE LIVE SHARE ───────────────────────────────────────────────────────
 let db = null;
@@ -2013,6 +2168,7 @@ window.closeShareTrip = closeShareTrip;
 document.getElementById('btn-start-share').addEventListener('click',()=>{
   if(!navigator.geolocation){alert('GPS not available.');return;}
   if(!db){alert('Live Share not available - check your Firebase URL in config.js.');return;}
+  if(isSharing){ alert('Already broadcasting — stop first.'); return; }
   roomCode = genCode();
   document.getElementById('room-code-display').textContent = roomCode;
   document.getElementById('btn-start-share').style.display='none';
@@ -2063,7 +2219,7 @@ function stopSharing(){
 }
 
 document.getElementById('btn-wa-share').addEventListener('click',()=>{
-  const msg=encodeURIComponent(`📍 Follow my trip! Open ontario-gps.netlify.app, tap 👥 Live Share → Join Someone's Trip and enter code: ${roomCode}`);
+  const msg=encodeURIComponent(`📍 Follow my trip! Open https://chris007-s.github.io/ontario-gps/ — tap 👥 Live Share → Join Someone's Trip and enter code: ${roomCode}`);
   window.open(`https://wa.me/?text=${msg}`,'_blank');
 });
 
@@ -2227,22 +2383,8 @@ document.getElementById('btn-findme-copy').addEventListener('click',()=>{
 });
 
 // ── NEARBY POIs ───────────────────────────────────────────────────────────────
-let currentNBCat='fuel';
-
-// ── NEARBY — TomTom Places API (free, no card, Canadian POIs) ───────────────
+// Nearby POI icons and text search terms
 const NB_ICONS={fuel:'⛽',fast_food:'🍔',cafe:'☕',pharmacy:'💊',hospital:'🏥',parking:'🅿️',atm:'🏧',supermarket:'🛒'};
-
-// TomTom category codes
-const TT_CATS={
-  fuel:'7311',           // Petrol/Gasoline Station
-  fast_food:'7315',      // Restaurant (fast food)
-  cafe:'9376',           // Coffee Shop
-  pharmacy:'7326',       // Pharmacy
-  hospital:'7321',       // Hospital
-  parking:'7369',        // Parking Garage/Lot
-  atm:'7397',            // ATM
-  supermarket:'7332',    // Grocery Store
-};
 
 window.loadNearby = async function(cat){
   document.querySelectorAll('.nb-cat').forEach(b=>{
@@ -2395,19 +2537,15 @@ async function fetchQuota(){
   try{
     let ghStatus=false, ttStatus=false;
     if(ghOK){
-      // Test ORS key with a small route request
-      const orsKey=(typeof GPS_CONFIG!=='undefined')?GPS_CONFIG.orsKey:'';
-      const orsOK=orsKey&&orsKey!=='YOUR_ORS_KEY_HERE';
-      if(orsOK){
-        const r=await fetch('https://api.openrouteservice.org/v2/directions/driving-car',{
-          method:'POST',
-          headers:{'Authorization':orsKey,'Content-Type':'application/json'},
-          body:JSON.stringify({coordinates:[[-79.38,43.65],[-79.40,43.70]],instructions:false,options:{avoid_features:['highways','tollways']}}),
-          signal:AbortSignal.timeout(8000)
-        });
-        ghStatus=r.ok;
-        console.log('ORS key test HTTP:',r.status);
-      }
+      // Test ORS connectivity with a tiny route
+      const r=await fetch('https://api.openrouteservice.org/v2/directions/driving-car',{
+        method:'POST',
+        headers:{'Authorization':orsKey,'Content-Type':'application/json'},
+        body:JSON.stringify({coordinates:[[-79.38,43.65],[-79.40,43.70]],instructions:false,options:{avoid_features:['highways','tollways']}}),
+        signal:AbortSignal.timeout(8000)
+      });
+      ghStatus=r.ok;
+      console.log('ORS key test HTTP:',r.status);
     }
     if(ttOK){
       const r=await fetch(`https://api.tomtom.com/search/2/categorySearch/coffee.json?lat=43.7&lon=-79.4&limit=1&key=${ttKey}`,{signal:AbortSignal.timeout(5000)});
@@ -2432,6 +2570,7 @@ setTimeout(()=>{
     if(navigator.permissions){
       navigator.permissions.query({name:'geolocation'}).then(r=>{
         if(r.state==='granted') doLocate();
+        else if(r.state==='denied') showPermDeniedBanner();
         else showInitialPermBanner();
       }).catch(()=>showInitialPermBanner());
     } else {
