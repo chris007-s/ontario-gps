@@ -358,6 +358,9 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 <button id="btn-debug-log" style="display:none;position:fixed;bottom:80px;right:14px;z-index:200;background:#7c3aed;color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:18px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3)" title="Download debug log">📋</button>
 <button id="btn-north-up" title="Tap to reset north-up / heading-up">🧭</button>
 
+<!-- Reroute to destination button — shown after arrival or passing destination -->
+<button id="btn-reroute-dest" style="display:none;position:fixed;bottom:90px;left:50%;transform:translateX(-50%);z-index:300;background:#1a73e8;color:#fff;border:none;border-radius:24px;padding:14px 24px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(26,115,232,.5);white-space:nowrap;letter-spacing:.2px">↺ Reroute to destination</button>
+
 <!-- Permission banner -->
 <div id="perm-banner">
   <h3>📍 Allow Location Access</h3>
@@ -1350,7 +1353,7 @@ function parseORS(data){
     text: s.type===11 ? 'Arrive at destination' : (s.instruction||'Continue'),
     distance: s.distance||0,
     sign: orsTypeToSign(s.type),
-    street: s.name||'',
+    street: (s.name && s.name!=='-') ? s.name : '',
     exit: s.exit_number||null,
     lanes: null,
     road: '',
@@ -1434,7 +1437,8 @@ function lanesHTML(lanes){
 // ── VOICE ─────────────────────────────────────────────────────────────────────
 function speak(txt){
   if(!voiceOn||!('speechSynthesis' in window)) return;
-  window.speechSynthesis.cancel();
+  // Do not cancel mid-speech — queue instead (upgraded version below handles this properly)
+  if(window.speechSynthesis.speaking){ return; } // upgraded speak() takes over after voices load
   const u=new SpeechSynthesisUtterance(txt);
   u.lang=lang; u.rate=1.05;
   u.onstart=()=>document.getElementById('vpip').style.display='block';
@@ -1454,7 +1458,14 @@ function speakStep(s){
       .trim();
   }
 
-  const street = cleanStreet(s.street);
+  // If s.street is empty, try extracting the road name from the instruction text
+  // ORS instruction format: "Turn left onto Kipling Avenue" or "Turn right onto -"
+  let rawStreetName = s.street||'';
+  if(!rawStreetName && s.text){
+    const m = s.text.match(/\bonto\s+(.+)$/i) || s.text.match(/\bon\s+(.+)$/i);
+    if(m) rawStreetName = m[1];
+  }
+  const street = cleanStreet(rawStreetName);
   const dirTxt = spkDir(s.sign);
 
   // Build the spoken phrase
@@ -1931,6 +1942,9 @@ function startDrive(){
   distanceDriven=0;
   lastPos=null;
   arrivedFlag=false;
+  // Store destination for reroute button
+  window._savedDest = endLL ? {lat:endLL.lat, lng:endLL.lng, label:document.getElementById('inp-to').value.trim()||'destination'} : null;
+  document.getElementById('btn-reroute-dest').style.display='none';
   arrivalConfirmations=0;
   navRouteIndex=0;
   navSnappedLL=null;
@@ -1992,6 +2006,7 @@ function stopDrive(){
   if(posMk){ map.removeLayer(posMk); posMk=null; }
   lastSLFetch=0; lastSLLL=null;
   if(route) showSheet('peek');
+  document.getElementById('btn-reroute-dest').style.display='none';
 }
 
 async function onPos(pos){
@@ -2117,12 +2132,18 @@ async function onPos(pos){
           const prep    = lang==='es-MX'?'En ':'In ';
           const dirTxt  = (lang==='es-MX'?SPK_ES:SPK_EN)[String(ns.sign)]||'Continue';
           // Clean street name same as speakStep
-          const rawStreet = ns.street||'';
+          let rawStreet = ns.street||'';
+          // Fallback: extract from instruction text if street field is empty
+          if(!rawStreet && ns.text){
+            const m = ns.text.match(/\bonto\s+(.+)$/i) || ns.text.match(/\bon\s+(.+)$/i);
+            if(m) rawStreet = m[1];
+          }
           const street = rawStreet
             .replace(/,\s*\d+(\s*\w)?$/,'')
             .replace(/^Highway\s+\d+\w*/i,'')
             .replace(/^Hwy\s+\d+\w*/i,'')
             .replace(/^ON-\d+\w*/i,'')
+            .replace(/^-$/,'')
             .trim();
           const onto = street?(lang==='es-MX'?' en ':' onto ')+street:'';
           window.speak(prep+distStr+', '+dirTxt+onto);
@@ -2145,7 +2166,16 @@ async function onPos(pos){
         if(finalStepIdx>=0) updateNav(finalStepIdx);
         if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
         window.speak('You have arrived at your destination');
-        setTimeout(()=>stopDrive(),2000);
+        setTimeout(()=>{
+          stopDrive();
+          // Show reroute button if destination is saved
+          if(window._savedDest){
+            const btn=document.getElementById('btn-reroute-dest');
+            const lbl=window._savedDest.label.split(',')[0];
+            btn.textContent='↺ Reroute to '+lbl;
+            btn.style.display='block';
+          }
+        },2000);
       }
     }else{
       arrivalConfirmations=0;
@@ -2620,21 +2650,41 @@ loadVoices();
   // function via a shared wrapper trick: replace body on the object.
   // Simplest reliable way: redefine speak as a new function in this scope
   // and reassign it on window so any window.speak() calls also work.
+  // Pending utterance queue — prevents new instructions cutting off current speech.
+  // Only one pending slot: if a new instruction arrives while queued, it replaces
+  // the queued one (we never want stale instructions to pile up).
+  let _pendingUtterance = null;
+
+  function _doSpeak(txt){
+    const u = new SpeechSynthesisUtterance(txt);
+    u.lang  = lang;
+    u.rate  = 1.0;
+    u.pitch = 1.0;
+    const bestVoice = lang==='es-MX' ? bestVoiceES : bestVoiceEN;
+    if(bestVoice) u.voice = bestVoice;
+    u.onstart = ()=>document.getElementById('vpip').style.display='block';
+    u.onend   = ()=>{
+      document.getElementById('vpip').style.display='none';
+      // If something was queued while we were speaking, fire it now
+      if(_pendingUtterance){
+        const next = _pendingUtterance;
+        _pendingUtterance = null;
+        setTimeout(()=>_doSpeak(next), 80);
+      }
+    };
+    u.onerror = ()=>{ document.getElementById('vpip').style.display='none'; _pendingUtterance=null; };
+    window.speechSynthesis.speak(u);
+  }
+
   window.speak = function speak(txt){
     if(!voiceOn||!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    setTimeout(()=>{
-      const u = new SpeechSynthesisUtterance(txt);
-      u.lang  = lang;
-      u.rate  = 1.0;
-      u.pitch = 1.0;
-      const bestVoice = lang==='es-MX' ? bestVoiceES : bestVoiceEN;
-      if(bestVoice) u.voice = bestVoice;
-      u.onstart  = ()=>document.getElementById('vpip').style.display='block';
-      u.onend    = ()=>document.getElementById('vpip').style.display='none';
-      u.onerror  = ()=>document.getElementById('vpip').style.display='none';
-      window.speechSynthesis.speak(u);
-    }, 50);
+    if(window.speechSynthesis.speaking){
+      // Don't cut off current speech — queue this instruction (replaces any previous queued)
+      _pendingUtterance = txt;
+    } else {
+      _pendingUtterance = null;
+      setTimeout(()=>_doSpeak(txt), 50);
+    }
   };
 })();
 
@@ -3034,6 +3084,29 @@ document.getElementById('chip-update').addEventListener('click', async ()=>{
     btn.textContent = '🔄 Update';
     btn.classList.remove('disabled');
     window.location.reload(true);
+  }
+});
+
+// Reroute to saved destination from current position
+document.getElementById('btn-reroute-dest').addEventListener('click', async ()=>{
+  const dest = window._savedDest;
+  if(!dest){ return; }
+  document.getElementById('btn-reroute-dest').style.display='none';
+  // Set endLL to saved destination
+  endLL = L.latLng(dest.lat, dest.lng);
+  document.getElementById('inp-to').value = dest.label;
+  document.getElementById('clr-to').style.display='block';
+  // Use current GPS position as start
+  if(lastPos){
+    startLL = L.latLng(lastPos.lat, lastPos.lng);
+  }
+  if(!startLL){ alert('Waiting for GPS fix — try again in a moment.'); return; }
+  try{
+    const r = await getRoute(startLL, endLL);
+    drawRoute(r);
+    startDrive();
+  }catch(e){
+    alert('Could not get route: '+e.message);
   }
 });
 
